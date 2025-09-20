@@ -144,7 +144,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
                 file,
                 engine='openpyxl',
                 header=2,
-                dtype={'Código': str}
+                dtype={'Codigo': str}
             )
         except Exception as e:
             return Response({'error': f'Error al leer el archivo: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
@@ -154,7 +154,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
 
         for index, row in df.iterrows():
 
-            codigo = str(row.get('Código'))
+            codigo = str(row.get('Codigo'))
 
             # DNI/RUC
             number = to_none_if_empty(row.get('DNI/RUC.'))
@@ -170,7 +170,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
                 number = "00000000"  # Valor por defecto si está vacío o no es válido
 
             full_name = to_none_if_empty(row.get('Usuario/Cliente'))
-            address = to_none_if_empty(row.get('Dirección'))
+            address = to_none_if_empty(row.get('Direccion'))
             calle_dir = row.get('cod_direc')
             zona_name = to_none_if_empty(row.get('Barrio'))
             
@@ -193,7 +193,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
             calle = Calle.objects.get(pk = calle_dir)
 
             # Medidor
-            code = to_none_if_empty(row.get('Cód.Medidor'))
+            code = to_none_if_empty(row.get('Cod.Medidor'))
             tiene_medidor_excel = to_none_if_empty(row.get('T.Med.'))
 
             if tiene_medidor_excel == "si":
@@ -397,7 +397,7 @@ class ReadingViewSet(viewsets.ModelViewSet):
         # 🔒 Bloqueo extra desde ViewSet
         if instance.paid:
             raise ValidationError(
-                f"No se puede modificar la lectura de {instance.period.strftime('%Y-%m')} porque ya está pagada."
+                f"No se puede modificar la lectura de {instance.period.strftime('%Y-%m')} porque ya esta pagada."
             )
 
         return serializer.save()
@@ -406,7 +406,7 @@ class ReadingViewSet(viewsets.ModelViewSet):
 
         # 🔒 No borrar si está pagada
         if instance.paid:
-            raise ValidationError({"error": "No se puede eliminar una lectura que ya está pagada."})
+            raise ValidationError({"error": "No se puede eliminar una lectura que ya esta pagada."})
 
         # 🔒 No borrar si existen lecturas posteriores pagadas
         has_paid_next = Reading.objects.filter(
@@ -484,14 +484,14 @@ class ReadingViewSet(viewsets.ModelViewSet):
         file = request.FILES.get('file')
 
         if not file:
-            return Response({'error': 'No se proporcionó un archivo.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'No se proporciono un archivo.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             df = pd.read_excel(
                 file,
                 engine='openpyxl',
                 header=2,
-                dtype={'Código': str}
+                dtype={'Codigo': str}
             )
         except Exception as e:
             return Response({'error': f'Error al leer el archivo: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
@@ -502,7 +502,7 @@ class ReadingViewSet(viewsets.ModelViewSet):
         debts = []
         for index, row in df.iterrows():
         
-            codigo = str(row.get('Código')).strip()
+            codigo = str(row.get('Codigo')).strip()
             customer = Customer.objects.get(codigo=codigo)
 
             for lect_col, month in month_map.items():
@@ -613,7 +613,7 @@ class ReadingViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'])
     def receipt(self, request, pk=None):
         """
-        Generar PDF de un solo recibo (para pruebas o impresión individual)
+        Generar PDF de un solo recibo (para pruebas o impresion individual)
         """
         reading = self.get_object()
         company = Company.objects.first()
@@ -691,7 +691,7 @@ class ReadingGenerationViewSet(viewsets.ModelViewSet):
 
         except ValueError:
 
-            return Response({"error": "Formato inválido de periodo"}, status=400)
+            return Response({"error": "Formato invalido de periodo"}, status=400)
 
         # validar si ya existe
         if ReadingGeneration.objects.filter(period=period_date).exists():
@@ -727,7 +727,7 @@ class ReadingGenerationViewSet(viewsets.ModelViewSet):
                 period=period_date,
                 created_by=request.user if request.user.is_authenticated else None,
                 total_generated=created,
-                notes="Generación automática para clientes sin medidor",
+                notes="Generacion automatica para clientes sin medidor",
                 date_of_issue = request.data.get("date_of_issue"),
                 date_of_due = request.data.get("date_of_due"),
                 date_of_cute = request.data.get("date_of_cute")
@@ -954,7 +954,7 @@ class DebtViewSet(viewsets.ModelViewSet):
                 file,
                 engine='openpyxl',
                 header=2,
-                dtype={'Código': str}
+                dtype={'Codigo': str}
             )
             # Limpiar strings problemáticos UTF-8
             df = df.applymap(lambda x: str(x).encode('utf-8', errors='ignore').decode('utf-8') if isinstance(x, str) else x)
@@ -1202,7 +1202,7 @@ class ViaViewSet(viewsets.ModelViewSet):
 
         if not file:
 
-            return Response({'error': 'No se proporcionó un archivo.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'No se proporciono un archivo.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
         
@@ -1238,7 +1238,7 @@ class ViaViewSet(viewsets.ModelViewSet):
 
             if not name or not codigo_via:
                 
-               print(f'Fila {index + 2}: calle inválida (nombre o id_via vacío)')
+               print(f'Fila {index + 2}: calle invalida (nombre o id_via vacio)')
                continue
 
             try:
@@ -1247,13 +1247,13 @@ class ViaViewSet(viewsets.ModelViewSet):
 
             except Via.DoesNotExist:
 
-                print(f'Fila {index + 2}: vía con código {codigo_via} no existe (para la calle "{name}")')
+                print(f'Fila {index + 2}: via con codigo {codigo_via} no existe (para la calle "{name}")')
 
                 continue
 
             if Calle.objects.filter(name=name, via=via).exists():
 
-                print(f'Fila {index + 2}: ya existe la calle "{name}" en la vía {via.name}')
+                print(f'Fila {index + 2}: ya existe la calle "{name}" en la via {via.name}')
                 continue
 
             calle = Calle(name=name, via=via, codigo=codigo)
