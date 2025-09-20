@@ -1,0 +1,233 @@
+[
+  {
+    "model": "agua.company",
+    "pk": 1,
+    "fields": {
+      "name": "SEDAPAL SAC",
+      "ruc": "999999999",
+      "address": "JR zona cero",
+      "phone": "944786353",
+      "email": "company@company.com"
+    }
+  },
+  {
+    "model": "agua.cashbox",
+    "pk": 1,
+    "fields": {
+      "user": 1,
+      "opening_date": "2025-09-15T10:00:00Z",
+      "closing_date": null,
+      "opening_balance": "100.00",
+      "closing_balance": "0.00",
+      "status": "open"
+    }
+  },
+  {
+    "model": "agua.cashbox",
+    "pk": 1,
+    "fields": {
+      "user": 1,
+      "opening_date": "2025-09-15T10:00:00Z",
+      "closing_date": null,
+      "opening_balance": "100.00",
+      "closing_balance": "0.00",
+      "status": "open"
+    }
+  },
+  {
+    "model": "agua.cashconcept",
+    "pk": 1,
+    "fields": {
+      "code": "001",
+      "name": "Servicio de agua",
+      "type": "income"
+    }
+  },
+  {
+    "model": "agua.cashconcept",
+    "pk": 2,
+    "fields": {
+      "code": "002",
+      "name": "Servicio de desagüe",
+      "type": "income"
+    }
+  },
+  {
+    "model": "agua.cashconcept",
+    "pk": 3,
+    "fields": {
+      "code": "003",
+      "name": "Cargo fijo",
+      "type": "income"
+    }
+  },
+  {
+    "model": "agua.cashconcept",
+    "pk": 4,
+    "fields": {
+      "code": "004",
+      "name": "Reconexión de servicio de agua",
+      "type": "income"
+    }
+  },
+  {
+    "model": "agua.cashconcept",
+    "pk": 5,
+    "fields": {
+      "code": "005",
+      "name": "Corte de servicio de agua",
+      "type": "income"
+    }
+  },
+  {
+    "model": "agua.cashconcept",
+    "pk": 6,
+    "fields": {
+      "code": "006",
+      "name": "Nueva instalación de servicio de agua",
+      "type": "income"
+    }
+  },
+  {
+    "model": "agua.cashconcept",
+    "pk": 7,
+    "fields": {
+      "code": "007",
+      "name": "Pago por informe de factibilidad de servicio",
+      "type": "income"
+    }
+  },
+  {
+    "model": "agua.cashconcept",
+    "pk": 8,
+    "fields": {
+      "code": "008",
+      "name": "Instalación de servicio de agua",
+      "type": "income"
+    }
+  },
+  {
+    "model": "agua.cashconcept",
+    "pk": 9,
+    "fields": {
+      "code": "009",
+      "name": "Suscripción en el padrón de usuarios",
+      "type": "income"
+    }
+  },
+  {
+    "model": "agua.cashconcept",
+    "pk": 10,
+    "fields": {
+      "code": "010",
+      "name": "Nueva instalación de servicio de desagüe",
+      "type": "income"
+    }
+  },
+  {
+    "model": "agua.cashconcept",
+    "pk": 11,
+    "fields": {
+      "code": "011",
+      "name": "Pago por inspección ocular técnica",
+      "type": "income"
+    }
+  },
+  {
+    "model": "agua.cashconcept",
+    "pk": 12,
+    "fields": {
+      "code": "012",
+      "name": "Pago por instalación de servicio de desagüe",
+      "type": "income"
+    }
+  },
+  {
+    "model": "agua.zona",
+    "pk": 1,
+    "fields": {
+      "codigo": "0001",
+      "name": "arturo duran"
+    }
+  },
+  {
+    "model": "agua.zona",
+    "pk": 2,
+    "fields": {
+      "codigo": "0002",
+      "name": "carretera a teoria"
+    }
+  },
+  {
+    "model": "agua.zona",
+    "pk": 3,
+    "fields": {
+      "codigo": "0003",
+      "name": "coaguila"
+    }
+  },
+  {
+    "model": "agua.zona",
+    "pk": 4,
+    "fields": {
+      "codigo": "0004",
+      "name": "eden"
+    }
+  },
+  {
+    "model": "agua.zona",
+    "pk": 5,
+    "fields": {
+      "codigo": "0005",
+      "name": "las flores"
+    }
+  },
+  {
+    "model": "agua.zona",
+    "pk": 6,
+    "fields": {
+      "codigo": "0006",
+      "name": "las lomas"
+    }
+  },
+  {
+    "model": "agua.zona",
+    "pk": 7,
+    "fields": {
+      "codigo": "0007",
+      "name": "monte sinay"
+    }
+  },
+  {
+    "model": "agua.zona",
+    "pk": 8,
+    "fields": {
+      "codigo": "0008",
+      "name": "san cristobal"
+    }
+  },
+  {
+    "model": "agua.zona",
+    "pk": 9,
+    "fields": {
+      "codigo": "0009",
+      "name": "valle escondido"
+    }
+  },
+  {
+    "model": "agua.zona",
+    "pk": 10,
+    "fields": {
+      "codigo": "0010",
+      "name": "villa josefina"
+    }
+  },
+  {
+    "model": "agua.zona",
+    "pk": 11,
+    "fields": {
+      "codigo": "0011",
+      "name": "sin zona"
+    }
+  }
+]

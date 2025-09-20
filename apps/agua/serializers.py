@@ -1,0 +1,463 @@
+from rest_framework import serializers
+from django.core.exceptions import ObjectDoesNotExist
+from django.utils.timezone import now
+from django.conf import settings
+from .models import Customer, WaterMeter, CashBox, CashMovement, DebtDetail, CashConcept, Reading, ReadingGeneration, Invoice, Category, Via, Calle, InvoiceDebt, Zona, Debt, InvoicePayment
+# from .models import Year, Category, Zona, Calle, Cash, Reading,  Invoice, Customer, Company, PaymentMethod, Service, Tariff
+from .utils import next_month_date
+from django.db import transaction
+from django.db.models import Sum
+
+import os
+
+class ZonaSerializer(serializers.ModelSerializer):
+
+    class Meta:
+
+        model = Zona
+        fields = '__all__'
+
+class CalleSerializer(serializers.ModelSerializer):
+
+    via_name = serializers.CharField(source='via.name', read_only=True)
+
+    class Meta:
+
+        model = Calle
+        fields = ['id', 'via', 'via_name', 'name','codigo']
+
+class WaterMeterSerializer(serializers.ModelSerializer):
+
+    customer = serializers.PrimaryKeyRelatedField(queryset=Customer.objects.all())
+
+    class Meta:
+        model = WaterMeter
+        fields = ['id', 'code', 'installation_date', 'customer']
+
+    def validate_customer(self, value):
+        if WaterMeter.objects.filter(customer=value).exists():
+            raise serializers.ValidationError("Este cliente ya tiene un medidor asignado.")
+        return value
+
+class CategorySerializer(serializers.ModelSerializer):
+
+    class Meta:
+        
+        model = Category
+        fields = '__all__'
+
+class DebtDetailSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = DebtDetail
+        fields = "__all__"
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # Agregar toda la data del cliente usando CustomerSerializer
+        data['concept'] = CashConceptSerializer(instance.concept).data
+        return data
+
+class DebtSerializer(serializers.ModelSerializer):
+
+    details = DebtDetailSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Debt
+        fields = '__all__'
+
+class CustomerSerializer(serializers.ModelSerializer):
+
+    total_debt = serializers.SerializerMethodField()
+
+    class Meta:
+
+        model = Customer
+        fields = '__all__'
+
+    def to_representation(self, instance):
+
+        data = super().to_representation(instance)
+
+        data['category'] = CategorySerializer(instance.category).data
+
+        if instance.has_meter and hasattr(instance, 'meter'):
+            data['meter'] = {
+                'code': instance.meter.code,
+                'installation_date': instance.meter.installation_date
+            }
+        else:
+            data['meter'] = None
+
+        # calle como objeto
+        if instance.calle:
+            data['calle'] = CalleSerializer(instance.calle).data
+        else:
+            data['calle'] = None
+
+        # calle como objeto
+        if instance.zona:
+            data['zona'] = ZonaSerializer(instance.zona).data
+        else:
+            data['zona'] = None
+
+        return data
+
+    def get_total_debt(self, obj):
+        # Sumamos las deudas pendientes
+        return obj.debts.filter(paid=False).aggregate(total=Sum("amount"))["total"] or 0
+
+class CustomerWithDebtsSerializer(serializers.ModelSerializer):
+
+    calle = CalleSerializer()
+    zona = ZonaSerializer()
+    debts = serializers.SerializerMethodField()
+    total_debt = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Customer
+        fields = '__all__'
+
+    def get_debts(self, obj):
+        # solo traemos las deudas pendientes
+        debts = obj.debts.filter(paid=False).order_by("-period")
+        return DebtSerializer(debts, many=True).data
+    
+    def get_total_debt(self, obj):
+        # Sumamos las deudas pendientes
+        return obj.debts.filter(paid=False).aggregate(total=Sum("amount"))["total"] or 0
+
+class CashBoxSerializer(serializers.ModelSerializer):
+
+    class Meta:
+
+        model = CashBox
+        fields = '__all__'
+
+class CashConceptSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = CashConcept
+        fields = "__all__"
+
+class ReadingSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Reading
+        fields = '__all__'
+    
+    def validate(self, data):
+        
+        customer = data.get('customer', self.instance.customer if self.instance else None)
+        period = data.get('period', self.instance.period if self.instance else None)
+        current_reading = data.get('current_reading', self.instance.current_reading if self.instance else None)
+
+        if not customer or not period:
+
+            return data
+
+        # ✅ Solo aplicar validaciones si el cliente tiene medidor
+        if not customer.has_meter:
+            
+            return data
+
+        # 1) Evitar lecturas duplicadas en el mismo mes y cliente
+        qs = Reading.objects.filter(
+            customer=customer,
+            period__year=period.year,
+            period__month=period.month
+        )
+
+        if self.instance:
+
+            qs = qs.exclude(id=self.instance.id)
+
+        if qs.exists():
+
+            raise serializers.ValidationError(
+                "Ya existe una lectura registrada para este cliente en el mismo mes."
+            )
+
+        # Buscar lectura anterior y siguiente
+        prev_reading = Reading.objects.filter(
+            customer=customer, period__lt=period
+        ).order_by("-period").first()
+
+        next_reading = Reading.objects.filter(
+            customer=customer, period__gt=period
+        ).order_by("period").first()
+
+        if prev_reading and current_reading < prev_reading.current_reading:
+            raise serializers.ValidationError(
+                {"current_reading": f"La lectura no puede ser menor que la de {prev_reading.period} ({prev_reading.current_reading})."}
+            )
+
+        if next_reading and current_reading > next_reading.current_reading:
+            raise serializers.ValidationError(
+                {"current_reading": f"La lectura no puede ser mayor que la de {next_reading.period} ({next_reading.current_reading})."}
+            )
+
+        # 2) Evitar registrar un mes anterior si ya existe uno posterior
+        future_qs = Reading.objects.filter(
+            customer=customer,
+            period__gt=period,
+            paid=True
+        )
+        if future_qs.exists():
+            raise serializers.ValidationError(
+                "No se puede editar porque existen lecturas posteriores ya pagadas."
+            )
+
+        # 3) Verificar que no se salten meses.
+        #    Obtenemos la última lectura (mes anterior) y comprobamos que la nueva sea el mes siguiente.
+        last_reading = Reading.objects.filter(
+            customer=customer,
+            period__lt=period
+        ).order_by('-period').first()
+
+        if last_reading:
+            # Calculamos la fecha del "próximo mes" a partir de la última lectura
+            expected_next_date = next_month_date(last_reading.period)
+
+            # Comparamos solo año y mes (en caso de que no uses día=1):
+            if (period.year != expected_next_date.year) or (period.month != expected_next_date.month):
+                raise serializers.ValidationError(
+                    "Debes registrar el mes consecutivo. El siguiente mes esperado es: "
+                    f"{expected_next_date.strftime('%B %Y')}"
+                )
+
+            # (Opcional) Verificar que current_reading >= last_reading.current_reading
+            if current_reading < last_reading.current_reading:
+                raise serializers.ValidationError(
+                    "La lectura actual no puede ser menor que la última lectura registrada."
+                )
+        else:
+            # Si no hay lecturas previas, esta es la primera: no hay mes anterior que validar.
+            pass
+
+        return data
+
+class ReadingGenerationSerializer(serializers.ModelSerializer):
+    created_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ReadingGeneration
+        # fields = ["id", "period", "created_at", "created_by_name", "total_generated", "notes"]
+        fields = '__all__'
+
+    def get_created_by_name(self, obj):
+        return obj.created_by.get_username() if obj.created_by else "Sistema"
+
+class InvoiceDebtSerializer(serializers.ModelSerializer):
+
+    class Meta:
+
+        model = InvoiceDebt
+        fields = ['debt']
+
+class InvoicePaymentSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = InvoicePayment
+        exclude = ['invoice']
+        read_only_fields = ['created_at']
+
+class InvoiceSerializer(serializers.ModelSerializer):
+    
+    invoice_debts = InvoiceDebtSerializer(many=True)
+    invoice_payments = InvoicePaymentSerializer(many=True)
+
+    class Meta:
+        model = Invoice
+        fields = '__all__'
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+
+        # Agregar toda la data del cliente usando CustomerSerializer
+        data['customer'] = CustomerSerializer(instance.customer).data
+
+        return data
+
+    def create(self, validated_data):
+        debts_data = validated_data.pop('invoice_debts', [])
+        payments_data = validated_data.pop('invoice_payments', [])
+
+        with transaction.atomic():
+            # Crear factura base
+            invoice = Invoice.objects.create(**validated_data)
+
+            total = 0
+            for item in debts_data:
+                debt = item['debt']  # aquí debería ser instancia de Debt si usas PKRelatedField
+                InvoiceDebt.objects.create(invoice=invoice, debt=debt, total=debt.amount)
+
+                # Marcar deuda como pagada
+                debt.paid = True
+                debt.save()
+
+                # marcar lectura asociada pagada (si existe)
+                if debt.reading:
+                    debt.reading.paid = True
+                    debt.reading.save(skip_process=True)
+
+                total += debt.amount
+
+            payments_total = 0
+            for item in payments_data:
+                payment = InvoicePayment.objects.create(
+                    invoice=invoice,
+                    method=item['method'],
+                    total=item['total'],
+                    reference=item.get('reference'),
+                    cashbox=item['cashbox']
+                )
+
+                # 🔹 Generar movimientos de caja por cada detalle de deuda
+                for inv_debt in invoice.invoice_debts.all():
+                    for detail in inv_debt.debt.details.all():
+                        CashMovement.objects.create(
+                            cashbox=item['cashbox'],
+                            concept=detail.concept,  # 👈 ahora se reparte por concepto real
+                            method=item['method'],
+                            total=detail.amount,     # 👈 reflejamos el monto de ese concepto
+                            reference=item.get('reference'),
+                            invoice_payment=payment
+                        )
+
+                payments_total += item['total']
+
+            # Validar que cuadren pagos y total
+            if round(payments_total, 2) != round(total, 2):
+                raise serializers.ValidationError({
+                    "payments": f"Los pagos ({payments_total}) no cuadran con el total ({total})"
+                })
+
+            invoice.total = total
+            invoice.save()
+
+        return invoice
+    
+# class CompanySerializer(serializers.ModelSerializer):
+
+#     class Meta:
+#         model = Company
+#         fields = '__all__'
+
+#     def update(self, instance, validated_data):
+#         # Verificar si hay un nuevo logo
+#         new_logo = validated_data.get("logo", None)
+#         if new_logo and instance.logo:
+#             # Eliminar el logo anterior del sistema de archivos
+#             old_logo_path = os.path.join(settings.MEDIA_ROOT, str(instance.logo))
+#             if os.path.exists(old_logo_path):
+#                 os.remove(old_logo_path)
+
+#         instance.logo = new_logo if new_logo else instance.logo  # Mantener el anterior si no se envía nuevo
+#         instance.name = validated_data.get("name", instance.name)
+#         instance.ruc = validated_data.get("ruc", instance.ruc)
+#         instance.address = validated_data.get("address", instance.address)
+
+#         instance.save()
+#         return instance
+
+# class PaymentMethodSerializer(serializers.ModelSerializer):
+
+#     class Meta:
+
+#         model = PaymentMethod
+#         fields = '__all__'
+
+# class YearSerializer(serializers.ModelSerializer):
+
+#     class Meta:
+        
+#         model = Year
+#         fields = '__all__'
+
+class ViaSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        
+        model = Via
+        fields = '__all__'
+
+
+# class ZonaSerializer(serializers.ModelSerializer):
+
+#     class Meta:
+#         model = Zona
+#         fields = '__all__'
+
+# class CalleSerializer(serializers.ModelSerializer):
+    
+#     class Meta:
+
+#         model = Calle
+#         fields = '__all__'
+
+#     def to_representation(self, instance):
+
+#         representation = super().to_representation(instance)
+
+#         if instance.zona:
+
+#             representation['zona'] = {
+#                 'id': instance.zona.id,
+#                 'name': instance.zona.name
+#             }
+
+#         return representation
+
+# class InvoiceSerializer(serializers.ModelSerializer):
+
+#     class Meta:
+#         model = Invoice
+#         fields = '__all__'
+
+#     def to_representation(self, instance):
+#         data = super().to_representation(instance)
+#         if instance.customer:
+#             data['customer'] = {
+#                 'id': instance.customer.id,
+#                 'full_name': instance.customer.full_name,
+#                 'number' : instance.customer.number,
+#                 'meter_code' : instance.customer.meter_code,
+#             }
+#         return data
+
+# class ServiceSerializer(serializers.ModelSerializer):
+
+#     class Meta:
+#         model = Service
+#         fields = '__all__'
+
+# class TariffSerializer(serializers.ModelSerializer):
+
+#     class Meta:
+#         model = Tariff
+#         fields = '__all__'
+
+#     def to_representation(self, instance):
+
+#         data = super().to_representation(instance)
+#         if instance.service:
+#            data['service'] = {
+#                'id' : instance.service.id,
+#                'name' : instance.service.name
+#            }
+
+#         if instance.category:
+#            data['category'] = {
+#                'id' : instance.category.id,
+#                'name' : instance.category.name
+#            }
+
+#         return data
+
+# class CashSerializer(serializers.ModelSerializer):
+
+#     class Meta:
+        
+#         model = Cash
+#         fields = '__all__'

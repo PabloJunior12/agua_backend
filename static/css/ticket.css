@@ -1,0 +1,81 @@
+@page {
+    size: 80mm auto;
+    margin: 0;
+}
+
+body {
+    font-family: 'Arial', sans-serif;
+    font-size: 11px;
+    margin: 0;
+    color: #000;
+}
+
+.container {
+    padding: 5px 7px;
+    width: 80mm;
+}
+
+.header {
+    text-align: center;
+}
+
+.logo {
+    max-width: 50px;
+    height: auto;
+    margin-bottom: 5px;
+}
+
+.company-info h2 {
+    margin: 0;
+    font-size: 14px;
+}
+
+.company-info p {
+    margin: 0;
+    font-size: 11px;
+}
+
+hr {
+    border: none;
+    border-top: 1px dashed #555;
+    margin: 4px 0;
+}
+
+.invoice-info, .customer-info {
+    font-size: 11px;
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 5px;
+}
+
+.table th, .table td {
+    padding: 3px 0;
+}
+
+.table th {
+    border-bottom: 1px solid #000;
+    font-size: 11px;
+    text-align: left;
+}
+
+.table td {
+    font-size: 11px;
+}
+
+.total-box {
+    border-top: 1px solid #000;
+    margin-top: 5px;
+    padding-top: 4px;
+    font-size: 12px;
+    text-align: right;
+    font-weight: bold;
+}
+
+.footer {
+    margin-top: 10px;
+    text-align: center;
+    font-size: 9px;
+}

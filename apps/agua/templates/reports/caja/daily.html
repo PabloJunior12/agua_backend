@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    @page { size: A4; margin: .5cm; }
+    body { font-family: sans-serif; font-size: 12px; }
+    h1 { text-align: center; margin-bottom: 20px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #444; padding: 6px; text-align: center; }
+    th { background: #eee; }
+    tfoot td { font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>Reporte Diario de Caja</h1>
+  <p><strong>Caja:</strong> {{ cashbox.id }} - {{ cashbox.user.username }}</p>
+  <p><strong>Fecha Apertura:</strong> {{ cashbox.opening_date }}</p>
+  <p><strong>Saldo Inicial:</strong> S/. {{ cashbox.opening_balance }}</p>
+
+
+  {% for c in conceptos %}
+    <p class="concepto">{{ c.concept.name }} — Total: S/. {{ c.total }}</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Código Factura</th>
+          <th>Fecha Factura</th>
+          <th>Cliente</th>
+          <th>Dirección</th>
+          <th>Monto (S/.)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for mov in c.movimientos %}
+          {% with invoice=mov.invoice_payment.invoice %}
+          <tr>
+            <td>{{ invoice.id|stringformat:"04d" }}</td>
+            <td>{{ invoice.created_at|date:"d/m/Y" }}</td>
+            <td>{{ invoice.customer.full_name }}</td>
+            <td>{{ invoice.customer.address|default:"-" }}</td>
+            <td>{{ mov.total }}</td>
+          </tr>
+          {% endwith %}
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endfor %}
+
+
+  <h3>Total General: S/. {{ total_general }}</h3>
+
+  <!-- <table>
+    <thead>
+      <tr>
+        <th>Concepto</th>
+        <th>Cantidad</th>
+        <th>Total (S/.)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for m in movimientos %}
+        <tr>
+          <td>{{ m.concept__name }}</td>
+          <td>{{ m.cantidad }}</td>
+          <td>{{ m.total_ingresos }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td colspan="2">TOTAL GENERAL</td>
+        <td>{{ total_general }}</td>
+      </tr>
+    </tfoot>
+  </table> -->
+</body>
+</html>
