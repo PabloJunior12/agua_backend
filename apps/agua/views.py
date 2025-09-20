@@ -946,8 +946,9 @@ class DebtViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['post'])
     def import_excel(self, request):
         file = request.FILES.get('file')
+
         if not file:
-            return Response({'error': 'No se proporciono un archivo.'}, status=400)
+            return Response({'error': 'No se proporciono un archivo.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             df = pd.read_excel(
@@ -956,90 +957,112 @@ class DebtViewSet(viewsets.ModelViewSet):
                 header=2,
                 dtype={'Codigo': str}
             )
-            # Limpiar strings problemáticos UTF-8
-            df = df.applymap(lambda x: str(x).encode('utf-8', errors='ignore').decode('utf-8') if isinstance(x, str) else x)
         except Exception as e:
-            return Response({'error': f'Error al leer el archivo: {str(e)}'}, status=400)
+            return Response({'error': f'Error al leer el archivo: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
 
         errores = []
         procesados = 0
 
         # precargar conceptos
-        conceptos = {c.code: c for c in CashConcept.objects.filter(code__in=["001", "002", "003"])}
-
-        debts_to_create = []
-        details_to_create = []
-
-        # Precargar todos los clientes en un diccionario para evitar queries por fila
-        clientes = {c.codigo: c for c in Customer.objects.select_related('category').all()}
+        conceptos = {
+            "001": CashConcept.objects.get(code="001"),  # Agua
+            "002": CashConcept.objects.get(code="002"),  # Desagüe
+            "003": CashConcept.objects.get(code="003"),  # Cargo fijo
+        }
 
         for index, row in df.iterrows():
             codigo = str(row.get('Codigo'))
-            year = row.get('Anio')
+            year = row.get('Año')
             meses_texto = to_none_if_empty(row.get('Meses'))
             total = to_decimal_or_none(row.get('Agua'))
 
-            if year == 2025:
-                continue  # saltar año 2025
+            if year != 2025:
+                if not meses_texto:
+                    errores.append({
+                        "codigo": codigo,
+                        "anio": year,
+                        "total": total,
+                        "error": "Campo 'Meses' vacio"
+                    })
+                    continue
 
-            if not meses_texto:
-                errores.append({"codigo": codigo, "anio": year, "total": total, "error": "Campo 'Meses' vacio"})
-                continue
+                try:
+                    customer = Customer.objects.get(codigo=codigo)
+                except Customer.DoesNotExist:
+                    errores.append({
+                        "codigo": codigo,
+                        "anio": year,
+                        "meses": meses_texto,
+                        "total": total,
+                        "error": "Cliente no encontrado"
+                    })
+                    continue
 
-            customer = clientes.get(codigo)
-            if not customer:
-                errores.append({"codigo": codigo, "anio": year, "meses": meses_texto, "total": total, "error": "Cliente no encontrado"})
-                continue
+                try:
+                    periodos = generar_periodos(int(year), meses_texto)
+                except Exception as e:
+                    errores.append({
+                        "codigo": codigo,
+                        "anio": year,
+                        "meses": meses_texto,
+                        "total": total,
+                        "error": f"Error al generar periodos: {str(e)}"
+                    })
+                    continue
 
-            try:
-                periodos = generar_periodos(int(year), meses_texto)
-            except Exception as e:
-                errores.append({"codigo": codigo, "anio": year, "meses": meses_texto, "total": total, "error": f"Error al generar periodos: {str(e)}"})
-                continue
+                # Calcular montos
+                total_water = (float(total) / len(periodos)) if (total and len(periodos) > 0) else 0
+                total_sewer = float(customer.category.price_sewer or 0)
+                total_fixed_charge = 3.0  # lo fijas en 3
 
-            total_water = (float(total) / len(periodos)) if (total and len(periodos) > 0) else 0
-            total_sewer = float(customer.category.price_sewer or 0)
-            total_fixed_charge = 3.0
-            amount = total_water + total_sewer + total_fixed_charge
+                amount = total_water + total_sewer + total_fixed_charge
 
-            for periodo in periodos:
-                debts_to_create.append({
-                    'customer': customer,
-                    'period': periodo,
-                    'description': "Deuda importada desde Excel",
-                    'amount': amount,
-                    'paid': False,
-                    'total_water': total_water,
-                    'total_sewer': total_sewer,
-                    'total_fixed_charge': total_fixed_charge
-                })
-                procesados += 1
+                for periodo in periodos:
+                    # buscar o crear deuda
+                    debt, created = Debt.objects.get_or_create(
+                        customer=customer,
+                        period=periodo,
+                        defaults={
+                            "description": "Deuda importada desde Excel",
+                            "amount": amount,
+                            "paid": False
+                        }
+                    )
 
-        # Insertar en la base de datos de forma eficiente
-        with transaction.atomic():
-            for d in debts_to_create:
-                debt, created = Debt.objects.update_or_create(
-                    customer=d['customer'],
-                    period=d['period'],
-                    defaults={'description': d['description'], 'amount': d['amount'], 'paid': d['paid']}
-                )
-                # Limpiar detalles previos si existía
-                if not created:
-                    debt.details.all().delete()
+                    if not created:
+                        # actualizar monto si ya existíat
+                        debt.amount = amount
+                        debt.save()
 
-                # Crear detalles en bulk
-                detalles = []
-                if d['total_water'] > 0:
-                    detalles.append(DebtDetail(debt=debt, concept=conceptos["001"], amount=d['total_water']))
-                if d['total_sewer'] > 0:
-                    detalles.append(DebtDetail(debt=debt, concept=conceptos["002"], amount=d['total_sewer']))
-                if d['total_fixed_charge'] > 0:
-                    detalles.append(DebtDetail(debt=debt, concept=conceptos["003"], amount=d['total_fixed_charge']))
+                        # limpiar detalles previos
+                        debt.details.all().delete()
 
-                if detalles:
-                    DebtDetail.objects.bulk_create(detalles)
+                    # crear detalles
+                    if total_water > 0:
+                        DebtDetail.objects.create(
+                            debt=debt,
+                            concept=conceptos["001"],
+                            amount=total_water
+                        )
+                    if total_sewer > 0:
+                        DebtDetail.objects.create(
+                            debt=debt,
+                            concept=conceptos["002"],
+                            amount=total_sewer
+                        )
+                    if total_fixed_charge > 0:
+                        DebtDetail.objects.create(
+                            debt=debt,
+                            concept=conceptos["003"],
+                            amount=total_fixed_charge
+                        )
 
-        return Response({"procesados": procesados, "errores": errores}, status=200)
+                    procesados += 1
+
+        return Response({
+            "procesados": procesados,
+            "errores": errores
+        }, status=status.HTTP_200_OK)
 
 class InvoiceViewSet(viewsets.ModelViewSet):
 
