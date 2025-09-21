@@ -1067,11 +1067,10 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         html_string = template.render(context)
 
         pdf_buffer = io.BytesIO()
-        css_path = os.path.join(settings.BASE_DIR, "static/css/ticket.css")
+        # css_path = os.path.join(settings.BASE_DIR, "static/css/ticket.css")
 
         HTML(string=html_string, base_url=request.build_absolute_uri()).write_pdf(
-            pdf_buffer,
-            stylesheets=[CSS(css_path)]
+            pdf_buffer
         )
 
         file_name = f"ticket_{invoice.id}.pdf"

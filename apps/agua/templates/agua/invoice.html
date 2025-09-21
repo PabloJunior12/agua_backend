@@ -1,69 +1,160 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <title>Recibo de Pago</title>
+
+    <style>
+        @page {
+            size: 80mm auto;
+            margin: 0;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            font-size: 11px;
+            margin: 0;
+            color: #000;
+        }
+
+        .container {
+            padding: 5px 7px;
+            width: 80mm;
+        }
+
+        .header {
+            text-align: center;
+        }
+
+        .logo {
+            max-width: 150px;
+            height: auto;
+            margin-bottom: 5px;
+        }
+
+        .company-info h2 {
+            margin: 0;
+            font-size: 14px;
+        }
+
+        .company-info p {
+            margin: 0;
+            font-size: 11px;
+        }
+
+        hr {
+            border: none;
+            border-top: 1px dashed #555;
+            margin: 4px 0;
+        }
+
+        .invoice-info,
+        .customer-info {
+            font-size: 11px;
+        }
+
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 5px;
+        }
+
+        .table th,
+        .table td {
+            padding: 3px 0;
+        }
+
+        .table th {
+            border-bottom: 1px solid #000;
+            font-size: 11px;
+            text-align: left;
+        }
+
+        .table td {
+            font-size: 11px;
+        }
+
+        .total-box {
+            border-top: 1px solid #000;
+            margin-top: 5px;
+            padding-top: 4px;
+            font-size: 12px;
+            text-align: right;
+            font-weight: bold;
+        }
+
+        .footer {
+            margin-top: 10px;
+            text-align: center;
+            font-size: 9px;
+        }
+    </style>
+
 </head>
+
 <body>
-<div class="container">
-    
-    <!-- Encabezado -->
-    <div class="header">
-        {% if company_logo %}
-            <img src="{{ company_logo }}" class="logo" alt="Logo">
-        {% endif %}
-        <div class="company-info">
-            <h2>{{ company_name }}</h2>
-            <p>RUC: {{ company_ruc }}</p>
+    <div class="container">
+
+        <!-- Encabezado -->
+        <div class="header">
+
+            <img src="{% static 'images/logo.jpeg' %}" class="logo" alt="Logo">
+
+            <div class="company-info">
+                <h2>Municipalidad Distrital de Pangoa</h2>
+                <p>RUC: 20146673776</p>
+            </div>
+        </div>
+
+        <hr>
+
+        <!-- Datos de factura -->
+        <div class="invoice-info">
+            <p><strong>Recibo Nº:</strong> {{ invoice.code }}</p>
+            <p><strong>Fecha:</strong> {{ invoice.date|date:"d/m/Y" }}</p>
+        </div>
+
+        <hr>
+
+        <!-- Datos del cliente -->
+        <div class="customer-info">
+            <p><strong>Cliente:</strong> {{ customer.full_name }}</p>
+            <p><strong>Dirección:</strong> {{ customer.address }}</p>
+        </div>
+
+        <hr>
+
+        <!-- Detalle de pagos -->
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Periodo</th>
+                    <th style="text-align:right;">Importe (S/)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in payments %}
+                <tr>
+                    <td>{{ item.debt.period|date:"F Y"|capfirst }}</td>
+                    <td style="text-align:right;">{{ item.total|floatformat:2 }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <!-- Total -->
+        <div class="total-box">
+            <p><strong>Total Pagado:</strong> S/ {{ invoice.total|floatformat:2 }}</p>
+        </div>
+
+        <!-- Pie -->
+        <div class="footer">
+            <p>Gracias por su pago</p>
+            <p>Este documento es válido como comprobante</p>
         </div>
     </div>
-
-    <hr>
-
-    <!-- Datos de factura -->
-    <div class="invoice-info">
-        <p><strong>Recibo Nº:</strong> {{ invoice.code }}</p>
-        <p><strong>Fecha:</strong> {{ invoice.date|date:"d/m/Y" }}</p>
-    </div>
-
-    <hr>
-
-    <!-- Datos del cliente -->
-    <div class="customer-info">
-        <p><strong>Cliente:</strong> {{ customer.full_name }}</p>
-        <p><strong>Dirección:</strong> {{ customer.address }}</p>
-    </div>
-
-    <hr>
-
-    <!-- Detalle de pagos -->
-    <table class="table">
-        <thead>
-            <tr>
-                <th>Periodo</th>
-                <th style="text-align:right;">Importe (S/)</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for item in payments %}
-            <tr>
-                <td>{{ item.debt.period|date:"F Y" }}</td>
-                <td style="text-align:right;">{{ item.total|floatformat:2 }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-
-    <!-- Total -->
-    <div class="total-box">
-        <p><strong>Total Pagado:</strong> S/ {{ invoice.total|floatformat:2 }}</p>
-    </div>
-
-    <!-- Pie -->
-    <div class="footer">
-        <p>Gracias por su pago</p>
-        <p>Este documento es válido como comprobante</p>
-    </div>
-</div>
 </body>
+
 </html>
