@@ -3,7 +3,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django.template.loader import render_to_string, get_template
 from django.http import HttpResponse
 from django.conf import settings
-from django.utils.timezone import now
+from django.utils.timezone import now, localdate
 from django.db import transaction
 from django.db.models import Max, Sum, Count
 
@@ -25,7 +25,7 @@ from decimal import Decimal
 from .models import Customer, WaterMeter, CashBox, Reading, DebtDetail, CashConcept, Invoice, Category, Via, Calle, InvoiceDebt, InvoicePayment, Zona, Debt, ReadingGeneration, Company
 from .serializers import (
     CustomerSerializer, WaterMeterSerializer, ViaSerializer, CalleSerializer, DebtSerializer, CashBoxSerializer, CustomerWithDebtsSerializer,
-    ReadingSerializer,  InvoiceSerializer, CategorySerializer, ZonaSerializer, ReadingGenerationSerializer
+    ReadingSerializer,  InvoiceSerializer, CategorySerializer, ZonaSerializer, ReadingGenerationSerializer, CashConceptSerializer
 )
 
 from PyPDF2 import PdfMerger 
@@ -237,22 +237,51 @@ class CashBoxViewSet(viewsets.ModelViewSet):
     serializer_class = CashBoxSerializer
 
     @action(detail=True, methods=["get"])
-    def daily_report(self, request, pk=None):
+    def report(self, request, pk=None):
         cashbox = self.get_object()
 
-        movimientos = cashbox.movements.select_related(
-            "concept", "invoice_payment__invoice__customer"
-        )
+        # Parámetros opcionales
+        start_date = request.query_params.get("start_date")
+        end_date = request.query_params.get("end_date")
+        date_param = request.query_params.get("date")
 
-        # Agrupamos movimientos por concepto
+        movimientos = cashbox.movements.all()
+
+        # 📌 1. Reporte entre fechas
+        if start_date and end_date:
+            try:
+                start = datetime.strptime(start_date, "%Y-%m-%d").date()
+                end = datetime.strptime(end_date, "%Y-%m-%d").date()
+            except ValueError:
+                return Response({"error": "Formato de fecha inválido (use YYYY-MM-DD)"}, status=400)
+
+            movimientos = movimientos.filter(created_at__date__range=(start, end))
+            reporte_tipo = f"Reporte entre {start} y {end}"
+
+        # 📌 2. Reporte diario (fecha específica o la de hoy)
+        else:
+            if date_param:
+                try:
+                    fecha = datetime.strptime(date_param, "%Y-%m-%d").date()
+                except ValueError:
+                    return Response({"error": "Formato de fecha inválido (use YYYY-MM-DD)"}, status=400)
+            else:
+                fecha = localdate()
+
+            movimientos = movimientos.filter(created_at__date=fecha)
+            reporte_tipo = f"Reporte diario - {fecha}"
+
+        # Agrupar movimientos por concepto
         conceptos_dict = defaultdict(list)
-        for mov in movimientos:
+        for mov in movimientos.select_related("concept", "invoice_payment__invoice__customer"):
             conceptos_dict[mov.concept].append(mov)
 
-        # Construimos estructura para el template
         conceptos_data = []
         for concept, movs in conceptos_dict.items():
-            total_concepto = sum([m.total for m in movs])
+            total_concepto = sum([
+                m.total if not (m.invoice_payment and m.invoice_payment.invoice.status == "cancelled") else 0
+                for m in movs
+            ])
             conceptos_data.append({
                 "concept": concept,
                 "total": total_concepto,
@@ -260,122 +289,90 @@ class CashBoxViewSet(viewsets.ModelViewSet):
             })
 
         total_general = sum([c["total"] for c in conceptos_data])
-
+        
         html_string = render_to_string("reports/caja/daily.html", {
             "cashbox": cashbox,
             "conceptos": conceptos_data,
             "total_general": total_general,
+            "reporte_tipo": reporte_tipo,
         })
 
         pdf = HTML(string=html_string).write_pdf()
         response = HttpResponse(pdf, content_type="application/pdf")
         response["Content-Disposition"] = f'filename="reporte_caja_{cashbox.id}.pdf"'
         return response
-    
-
-    # @action(detail=True, methods=['get'], url_path="report_pdf")
-    # def report_pdf(self, request, pk=None):
-
-    #     cashbox = self.get_object()
-    #     start_date = request.query_params.get("start")
-    #     end_date = request.query_params.get("end")
-
-    #     if not start_date or not end_date:
-         
-    #        return Response({"error":"Debes enviar start y end"}, status=status.HTTP_400_BAD_REQUEST)
-        
-    #     start_date = datetime.fromisoformat(start_date).date()
-    #     end_date = datetime.fromisoformat(end_date).date()
-
-    #     payments = cashbox.payments.filter(created_at__date__range=(start_date, end_date))
-
-    #     total = sum(p.total for p in payments)
-
-    #     by_method = {}
-    #     for p in payments:
-
-    #         by_method.setdefault(p.method, 0)
-    #         by_method[p.method] += float(p.total)
-
-    #     invoices = set(p.invoice for p in payments)
-
-    #     html_string = render_to_string("reports/caja/cashbox_report_range.html", {
-
-    #         "cashbox": cashbox,
-    #         "payments": payments,
-    #         "start_date": start_date,
-    #         "end_date": end_date,
-    #         "total": total,
-    #         "by_method": by_method,
-    #         "invoices": invoices,
-
-    #     }) 
-
-    #      # Generar PDF
-    #     html = HTML(string=html_string)
-    #     pdf = html.write_pdf()
-
-    #     response = HttpResponse(pdf, content_type="application/pdf")
-    #     response["Content-Disposition"] = f'inline; filename="reporte_caja_{cashbox.id}.pdf"'
-    #     return response
 
     @action(detail=True, methods=["get"])
-    def daily_report_pdf(self, request, pk=None):
-        """
-        Reporte diario en PDF: ingresos por método + detalle de facturas
-        """
+    def report_methods(self, request, pk=None):
         cashbox = self.get_object()
-        date = request.query_params.get("date", now().date())
 
-        # Resumen por método
-        payments_summary = (
-            InvoicePayment.objects
-            .filter(
-                cashbox=cashbox,
-                created_at__date=date,
-                invoice__status="active"
-            )
-            .values("method")
-            .annotate(total=Sum("total"))
-            .order_by("method")
-        )
+        # Filtros de fecha
+        start_date = request.query_params.get("start_date")
+        end_date = request.query_params.get("end_date")
+        date_param = request.query_params.get("date")
 
-        # Total general
-        total = (
-            InvoicePayment.objects
-            .filter(
-                cashbox=cashbox,
-                created_at__date=date,
-                invoice__status="active"
-            )
-            .aggregate(total=Sum("total"))["total"] or 0
-        )
+        movimientos = cashbox.movements.all()
 
-        # Detalle de facturas (clientes que pagaron)
-        invoices = (
-            Invoice.objects
-            .filter(
-                invoice_payments__cashbox=cashbox,
-                invoice_payments__created_at__date=date,
-                status="active"
-            )
-            .distinct()
-        )
+        if start_date and end_date:
+            start = datetime.strptime(start_date, "%Y-%m-%d").date()
+            end = datetime.strptime(end_date, "%Y-%m-%d").date()
+            movimientos = movimientos.filter(created_at__date__range=(start, end))
+            reporte_tipo = f"Reporte de métodos entre {start} y {end}"
+        else:
+            if date_param:
+                fecha = datetime.strptime(date_param, "%Y-%m-%d").date()
+            else:
+                fecha = localdate()
+            movimientos = movimientos.filter(created_at__date=fecha)
+            reporte_tipo = f"Reporte de métodos - {fecha}"
 
-        html_string = render_to_string("reports/caja/daily.html", {
-            "date": date,
+        # Agrupar por método de pago
+        metodo_dict = defaultdict(list)
+        for mov in movimientos.select_related("invoice_payment__invoice"):
+            metodo_dict[mov.method].append(mov)
+
+        metodo_data = []
+        for metodo, movs in metodo_dict.items():
+            total_metodo = sum([
+                m.total if not (m.invoice_payment and m.invoice_payment.invoice.status == "cancelled") else 0
+                for m in movs
+            ])
+            metodo_data.append({
+                "metodo": dict(InvoicePayment.PAYMENT_METHODS).get(metodo, metodo),
+                "total": total_metodo,
+                "movimientos": movs
+            })
+
+        total_general = sum([m["total"] for m in metodo_data])
+
+        # Agrupar por conceptos (igual que antes)
+        conceptos_dict = defaultdict(list)
+        for mov in movimientos.select_related("concept", "invoice_payment__invoice__customer"):
+            conceptos_dict[mov.concept].append(mov)
+
+        conceptos_data = []
+        for concept, movs in conceptos_dict.items():
+            total_concepto = sum([
+                m.total if not (m.invoice_payment and m.invoice_payment.invoice.status == "cancelled") else 0
+                for m in movs
+            ])
+            conceptos_data.append({
+                "concept": concept,
+                "total": total_concepto,
+            })
+
+
+        html_string = render_to_string("reports/caja/methods.html", {
             "cashbox": cashbox,
-            "payments_summary": payments_summary,
-            "total": total,
-            "invoices": invoices,
+            "metodos": metodo_data,
+            "conceptos": conceptos_data,
+            "total_general": total_general,
+            "reporte_tipo": reporte_tipo,
         })
 
-        # Generar PDF
-        html = HTML(string=html_string)
-        pdf = html.write_pdf()
-
+        pdf = HTML(string=html_string).write_pdf()
         response = HttpResponse(pdf, content_type="application/pdf")
-        response["Content-Disposition"] = f'inline; filename="reporte_caja_{cashbox.id}_{date}.pdf"'
+        response["Content-Disposition"] = f'filename="reporte_metodos_{cashbox.id}.pdf"'
         return response
 
 class WaterMeterViewSet(viewsets.ModelViewSet):
@@ -1063,6 +1060,8 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             "company_logo": None
         }
 
+        print(context)
+
         template = get_template('agua/invoice.html')
         html_string = template.render(context)
 
@@ -1085,43 +1084,15 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         invoice.cancel()
         return Response({"message": "Factura anulada"}, status=status.HTTP_200_OK)
 
-    @action(detail=False, methods=['get'], url_path='daily-report')
-    def daily_report(self, request, pk=None):
-
-        report_date_str = request.query_params.get('date')
-
-        if report_date_str:
-
-           report_date = date.fromisoformat(report_date_str)
-        
-        else:
-
-           report_date = date.today()
-        
-        invoices = Invoice.objects.filter(date=report_date, status='active')
-        total_cash = invoices.filter(method="cash").aggregate(total=Sum("total"))["total"] or 0
-        total_yape = invoices.filter(method="yape").aggregate(total=Sum("total"))["total"] or 0
-        total = total_cash + total_yape
-
-   
-        html_string = render_to_string("reports/invoices/daily .html", {
-            "report_date": report_date,
-            "invoices": invoices,
-            "total_cash": total_cash,
-            "total_yape": total_yape,
-            "grand_total": total,
-        })
-
-        pdf = HTML(string=html_string).write_pdf()
-
-        response = HttpResponse(pdf, content_type="application/pdf")
-        response["Content-Disposition"] = f'inline; filename="cobranzas_{report_date}.pdf"'
-        return response
-
 # class CompanyViewSet(ModelViewSet):
 
 #     queryset = Company.objects.all()
 #     serializer_class = CompanySerializer
+
+class CashConceptViewSet(viewsets.ModelViewSet):
+
+    queryset = CashConcept.objects.all() 
+    serializer_class = CashConceptSerializer
 
 class CategoryViewSet(viewsets.ModelViewSet):
     
@@ -1266,7 +1237,6 @@ class CalleViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['via']  # permite filtrar por tipo_via id
     search_fields = ['codigo','name']
-    # ordering_fields = ['name']
 
 class ZonaViewSet(viewsets.ModelViewSet):
 

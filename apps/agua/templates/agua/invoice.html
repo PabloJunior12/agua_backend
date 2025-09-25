@@ -8,20 +8,18 @@
 
     <style>
         @page {
-            size: 80mm auto;
-            margin: 0;
+            size: 80mm 180mm;
+            /* ancho fijo, alto estimado */
+            margin: 10px;
         }
 
         body {
             font-family: 'Arial', sans-serif;
             font-size: 11px;
-            margin: 0;
-            color: #000;
-        }
 
-        .container {
-            padding: 5px 7px;
-            width: 80mm;
+            margin: 0 auto;
+            color: #000;
+
         }
 
         .header {
@@ -90,11 +88,30 @@
             text-align: center;
             font-size: 9px;
         }
+
+        .watermark {
+            position: fixed;
+            top: 40%;
+            left: 10%;
+            width: 80%;
+            text-align: center;
+            font-size: 40px;
+            font-weight: bold;
+            color: red;
+            opacity: 0.2;
+            transform: rotate(-30deg);
+            z-index: 9999;
+        }
     </style>
 
 </head>
 
 <body>
+
+    {% if invoice.status == "cancelled" %}
+    <div class="watermark">ANULADO</div>
+    {% endif %}
+
     <div class="container">
 
         <!-- Encabezado -->
@@ -138,7 +155,13 @@
                 {% for item in payments %}
                 <tr>
                     <td>{{ item.debt.period|date:"F Y"|capfirst }}</td>
-                    <td style="text-align:right;">{{ item.total|floatformat:2 }}</td>
+                    <td style="text-align:right;">
+                        {% if invoice.status == "cancelled" %}
+                        0.00
+                        {% else %}
+                        {{ item.total|floatformat:2 }}
+                        {% endif %}
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -146,7 +169,16 @@
 
         <!-- Total -->
         <div class="total-box">
-            <p><strong>Total Pagado:</strong> S/ {{ invoice.total|floatformat:2 }}</p>
+
+            <p><strong>Total Pagado:</strong> S/
+
+                {% if invoice.status == "cancelled" %}
+                0.00
+                {% else %}
+                {{ invoice.total|floatformat:2 }}
+                {% endif %}
+
+            </p>
         </div>
 
         <!-- Pie -->

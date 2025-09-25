@@ -147,7 +147,7 @@
     "pk": 1,
     "fields": {
       "codigo": "0001",
-      "name": "arturo duran"
+      "name": "ARTURO DURAN"
     }
   },
   {
@@ -155,7 +155,7 @@
     "pk": 2,
     "fields": {
       "codigo": "0002",
-      "name": "carretera a teoria"
+      "name": "CARRETERA A TEORIA"
     }
   },
   {
@@ -163,7 +163,7 @@
     "pk": 3,
     "fields": {
       "codigo": "0003",
-      "name": "coaguila"
+      "name": "COAGUILA"
     }
   },
   {
@@ -171,7 +171,7 @@
     "pk": 4,
     "fields": {
       "codigo": "0004",
-      "name": "eden"
+      "name": "EDEN"
     }
   },
   {
@@ -179,7 +179,7 @@
     "pk": 5,
     "fields": {
       "codigo": "0005",
-      "name": "las flores"
+      "name": "LAS FLORES"
     }
   },
   {
@@ -187,7 +187,7 @@
     "pk": 6,
     "fields": {
       "codigo": "0006",
-      "name": "las lomas"
+      "name": "LAS LOMAS"
     }
   },
   {
@@ -195,7 +195,7 @@
     "pk": 7,
     "fields": {
       "codigo": "0007",
-      "name": "monte sinay"
+      "name": "MONTE SINAY"
     }
   },
   {
@@ -203,7 +203,7 @@
     "pk": 8,
     "fields": {
       "codigo": "0008",
-      "name": "san cristobal"
+      "name": "SAN CRISTOBAL"
     }
   },
   {
@@ -211,7 +211,7 @@
     "pk": 9,
     "fields": {
       "codigo": "0009",
-      "name": "valle escondido"
+      "name": "VALLE ESCONDIDO"
     }
   },
   {
@@ -219,7 +219,7 @@
     "pk": 10,
     "fields": {
       "codigo": "0010",
-      "name": "villa josefina"
+      "name": "VILLA JOSEFINA"
     }
   },
   {
@@ -227,7 +227,7 @@
     "pk": 11,
     "fields": {
       "codigo": "0011",
-      "name": "sin zona"
+      "name": "SIN ZONA"
     }
   }
 ]

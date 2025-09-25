@@ -67,7 +67,7 @@ TEMPLATES = [
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework.authentication.TokenAuthentication',  # Autenticación por token
+        'rest_framework.authentication.TokenAuthentication',  # Autenticacion por token
     ),
     # 'DEFAULT_PERMISSION_CLASSES': (
     #     'rest_framework.permissions.IsAuthenticated',  # Solo usuarios autenticados pueden acceder
@@ -86,7 +86,7 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql_psycopg2',
         'NAME': 'agua',
-        'USER': 'postgres',
+        'USER': 'agua_user',
         'PASSWORD': 'curo',
         'HOST': 'localhost',
         'PORT': '5432',
@@ -129,13 +129,12 @@ USE_TZ = True
 
 AUTH_USER_MODEL = 'user.User'
 
-CORS_ALLOW_ALL_ORIGINS = True
-
 CORS_ALLOWED_ORIGINS = [
+    "https://pangoa.umg.jsistemas.info",
     "http://localhost:4200", 
-    "https://agua.jsistemas.info"
 ]
 
+CORS_ALLOW_CREDENTIALS = True
 
 
 # Static files (CSS, JavaScript, Images)
@@ -144,7 +143,7 @@ CORS_ALLOWED_ORIGINS = [
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [os.path.join(BASE_DIR, "static")]
 
-# En producción (usando collectstatic)
+# En produccion (usando collectstatic)
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 

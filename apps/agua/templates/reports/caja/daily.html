@@ -1,79 +1,98 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <style>
-    @page { size: A4; margin: .5cm; }
-    body { font-family: sans-serif; font-size: 12px; }
-    h1 { text-align: center; margin-bottom: 20px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-    th, td { border: 1px solid #444; padding: 6px; text-align: center; }
-    th { background: #eee; }
-    tfoot td { font-weight: bold; }
-  </style>
+    <meta charset="UTF-8">
+    <style>
+        @page { size: A4; margin: .5cm; }
+        body { font-family: Arial, sans-serif; font-size: 12px; }
+        h1, h2, h3 { margin: 0; padding: 0; }
+        .header { text-align: center; margin-bottom: 20px; }
+        .title { font-size: 16px; font-weight: bold; }
+        .subtitle { font-size: 12px; color: #555; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 6px;
+            text-align: left;
+        }
+        th { background-color: #f5f5f5; }
+        .right { text-align: right; }
+        .total {
+            font-weight: bold;
+            background-color: #f0f0f0;
+        }
+        .cancelled {
+            color: red;
+            font-weight: bold;
+        }
+    </style>
 </head>
 <body>
-  <h1>Reporte Diario de Caja</h1>
-  <p><strong>Caja:</strong> {{ cashbox.id }} - {{ cashbox.user.username }}</p>
-  <p><strong>Fecha Apertura:</strong> {{ cashbox.opening_date }}</p>
-  <p><strong>Saldo Inicial:</strong> S/. {{ cashbox.opening_balance }}</p>
 
+    <!-- Cabecera -->
+    <div class="header">
+        <div class="title">{{ reporte_tipo }}</div>
+        <div class="subtitle">
+            Caja Nº {{ cashbox.id }} - Usuario: {{ cashbox.user.username }}
+        </div>
+    </div>
 
-  {% for c in conceptos %}
-    <p class="concepto">{{ c.concept.name }} — Total: S/. {{ c.total }}</p>
+    <!-- Tabla de conceptos -->
+    {% for concepto in conceptos %}
+        <h3>{{ concepto.concept.name }}</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Código Factura</th>
+                    <th>Fecha</th>
+                    <th>Cliente</th>
+                    <th>Direccion</th>
+                    <th>Método</th>
+                    <th class="right">Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for mov in concepto.movimientos %}
+                <tr>
+                    <td>{{ mov.invoice_payment.invoice.id |stringformat:"04d" }}</td>
+                    <td>{{ mov.created_at|date:"d/m/Y" }}</td>
+                    <td>
+                        {% if mov.invoice_payment and mov.invoice_payment.invoice.customer %}
+                            {{ mov.invoice_payment.invoice.customer.full_name }}
+                            {% if mov.invoice_payment.invoice.status == "cancelled" %}
+                                <span class="cancelled">(ANULADO)</span>
+                            {% endif %}
+                        {% else %}
+                            ---
+                        {% endif %}
+                    </td>
+                    <td>{{ mov.invoice_payment.invoice.customer.address }}</td>
+                    <td>{{ mov.get_method_display }}</td>
+                    <td class="right">
+                        {% if mov.invoice_payment and mov.invoice_payment.invoice.status == "cancelled" %}
+                            0.00
+                        {% else %}
+                            {{ mov.total|floatformat:2 }}
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                <tr class="total">
+                    <td colspan="5" class="right">Total {{ concepto.concept.name }}</td>
+                    <td class="right">{{ concepto.total|floatformat:2 }}</td>
+                </tr>
+            </tbody>
+        </table>
+    {% endfor %}
 
-    <table>
-      <thead>
-        <tr>
-          <th>Código Factura</th>
-          <th>Fecha Factura</th>
-          <th>Cliente</th>
-          <th>Dirección</th>
-          <th>Monto (S/.)</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for mov in c.movimientos %}
-          {% with invoice=mov.invoice_payment.invoice %}
-          <tr>
-            <td>{{ invoice.id|stringformat:"04d" }}</td>
-            <td>{{ invoice.created_at|date:"d/m/Y" }}</td>
-            <td>{{ invoice.customer.full_name }}</td>
-            <td>{{ invoice.customer.address|default:"-" }}</td>
-            <td>{{ mov.total }}</td>
-          </tr>
-          {% endwith %}
-        {% endfor %}
-      </tbody>
-    </table>
-  {% endfor %}
+    <!-- Total general -->
+    <h2 style="text-align:right; margin-top:20px;">
+        Total General: S/ {{ total_general|floatformat:2 }}
+    </h2>
 
-
-  <h3>Total General: S/. {{ total_general }}</h3>
-
-  <!-- <table>
-    <thead>
-      <tr>
-        <th>Concepto</th>
-        <th>Cantidad</th>
-        <th>Total (S/.)</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for m in movimientos %}
-        <tr>
-          <td>{{ m.concept__name }}</td>
-          <td>{{ m.cantidad }}</td>
-          <td>{{ m.total_ingresos }}</td>
-        </tr>
-      {% endfor %}
-    </tbody>
-    <tfoot>
-      <tr>
-        <td colspan="2">TOTAL GENERAL</td>
-        <td>{{ total_general }}</td>
-      </tr>
-    </tfoot>
-  </table> -->
 </body>
 </html>
