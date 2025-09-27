@@ -7,6 +7,8 @@ from dateutil.relativedelta import relativedelta
 from django.utils.timezone import now
 from django.conf import settings
 
+
+
 class Company(models.Model):
 
     name = models.CharField(max_length=255, verbose_name="Nombre de la empresa")

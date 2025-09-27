@@ -74,10 +74,7 @@ REST_FRAMEWORK = {
     # ),
 }
 
-
-
 WSGI_APPLICATION = 'agua.wsgi.application'
-
 
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
@@ -86,7 +83,7 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql_psycopg2',
         'NAME': 'agua',
-        'USER': 'agua_user',
+        'USER': 'postgres',
         'PASSWORD': 'curo',
         'HOST': 'localhost',
         'PORT': '5432',

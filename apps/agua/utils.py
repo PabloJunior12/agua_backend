@@ -111,3 +111,13 @@ def generar_periodos(anio, meses_texto):
     for mes in range(mes_inicio, mes_fin + 1):
         periodos.append(date(anio, mes, 1))
     return periodos
+
+def format_period(periodo):
+        
+        year = periodo.year
+        month = periodo.month
+        meses = [
+            "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+            "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+        ]
+        return f"{meses[month-1]} {year}"

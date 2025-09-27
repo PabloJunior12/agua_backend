@@ -4,6 +4,7 @@ from django.template.loader import render_to_string, get_template
 from django.http import HttpResponse
 from django.conf import settings
 from django.utils.timezone import now, localdate
+from django.utils.formats import date_format
 from django.db import transaction
 from django.db.models import Max, Sum, Count
 
@@ -36,7 +37,7 @@ import os
 import tempfile
 import zipfile
 
-from .utils import ReadingFilter, DebtFilter, to_none_if_empty, to_decimal_or_none, generar_periodos
+from .utils import ReadingFilter, DebtFilter, to_none_if_empty, to_decimal_or_none, generar_periodos, format_period
 
 class CustomPagination(PageNumberPagination):
 
@@ -240,14 +241,13 @@ class CashBoxViewSet(viewsets.ModelViewSet):
     def report(self, request, pk=None):
         cashbox = self.get_object()
 
-        # Parámetros opcionales
+        # 📌 Filtros de fechas
         start_date = request.query_params.get("start_date")
         end_date = request.query_params.get("end_date")
         date_param = request.query_params.get("date")
 
         movimientos = cashbox.movements.all()
 
-        # 📌 1. Reporte entre fechas
         if start_date and end_date:
             try:
                 start = datetime.strptime(start_date, "%Y-%m-%d").date()
@@ -257,8 +257,6 @@ class CashBoxViewSet(viewsets.ModelViewSet):
 
             movimientos = movimientos.filter(created_at__date__range=(start, end))
             reporte_tipo = f"Reporte entre {start} y {end}"
-
-        # 📌 2. Reporte diario (fecha específica o la de hoy)
         else:
             if date_param:
                 try:
@@ -271,30 +269,98 @@ class CashBoxViewSet(viewsets.ModelViewSet):
             movimientos = movimientos.filter(created_at__date=fecha)
             reporte_tipo = f"Reporte diario - {fecha}"
 
-        # Agrupar movimientos por concepto
+        # ==========================
+        # AGRUPACIÓN POR CONCEPTO
+        # ==========================
         conceptos_dict = defaultdict(list)
+
         for mov in movimientos.select_related("concept", "invoice_payment__invoice__customer"):
-            conceptos_dict[mov.concept].append(mov)
+            concepto = mov.concept.name
+            conceptos_dict[concepto].append(mov)
 
         conceptos_data = []
-        for concept, movs in conceptos_dict.items():
-            total_concepto = sum([
+
+        for concepto, movs in conceptos_dict.items():
+            facturas_dict = {}
+
+            for m in movs:
+                inv = m.invoice_payment.invoice if m.invoice_payment else None
+
+                if not inv or inv.status == "cancelled":
+                    continue  # ignoramos facturas anuladas
+
+                key = inv.id
+                if key not in facturas_dict:
+                    facturas_dict[key] = {
+                        "code": inv.code,
+                        "date": inv.date,
+                        "cliente": inv.customer.full_name,
+                        "direccion": inv.customer.address,
+                        "pagos": defaultdict(float),
+                        "total": 0,
+                        "periodo": "",  # 👈 string vacío por defecto
+                    }
+
+                    # 📌 Solo calcular periodo si el concepto es 001, 002 o 003
+                    if m.concept.code in ["001", "002", "003"]:
+                        periodos = list(
+                            inv.invoice_debts.select_related("debt")
+                            .values_list("debt__period", flat=True)
+                        )
+
+                        if periodos:
+                            periodos = sorted(periodos)
+                            if len(periodos) == 1:
+                                facturas_dict[key]["periodo"] = format_period(periodos[0])
+                            else:
+                                facturas_dict[key]["periodo"] = (
+                                    f"{format_period(periodos[0])} - {format_period(periodos[-1])}"
+                                )
+
+                metodo = m.invoice_payment.method if m.invoice_payment else "Desconocido"
+                facturas_dict[key]["pagos"][metodo] += float(m.total)
+                facturas_dict[key]["total"] += float(m.total)
+
+            # Convertir a lista
+            facturas_list = []
+            total_concepto = 0
+            for f in facturas_dict.values():
+                total_concepto += f["total"]
+                f["pagos"] = dict(f["pagos"])  # pasar defaultdict a dict normal
+                facturas_list.append(f)
+
+            conceptos_data.append({
+                "concepto": concepto,
+                "total": total_concepto,
+                "facturas": facturas_list,
+            })
+
+        total_general = sum(c["total"] for c in conceptos_data)
+
+        # Agrupar por método de pago
+        metodo_dict = defaultdict(list)
+        for mov in movimientos.select_related("invoice_payment__invoice"):
+            metodo_dict[mov.method].append(mov)
+
+        metodo_data = []
+        for metodo, movs in metodo_dict.items():
+
+            total_metodo = sum([
                 m.total if not (m.invoice_payment and m.invoice_payment.invoice.status == "cancelled") else 0
                 for m in movs
             ])
-            conceptos_data.append({
-                "concept": concept,
-                "total": total_concepto,
+            metodo_data.append({
+                "metodo": dict(InvoicePayment.PAYMENT_METHODS).get(metodo, metodo),
+                "total": total_metodo,
                 "movimientos": movs
             })
 
-        total_general = sum([c["total"] for c in conceptos_data])
-        
         html_string = render_to_string("reports/caja/daily.html", {
             "cashbox": cashbox,
             "conceptos": conceptos_data,
             "total_general": total_general,
             "reporte_tipo": reporte_tipo,
+            "metodos": metodo_data,
         })
 
         pdf = HTML(string=html_string).write_pdf()
@@ -374,6 +440,7 @@ class CashBoxViewSet(viewsets.ModelViewSet):
         response = HttpResponse(pdf, content_type="application/pdf")
         response["Content-Disposition"] = f'filename="reporte_metodos_{cashbox.id}.pdf"'
         return response
+
 
 class WaterMeterViewSet(viewsets.ModelViewSet):
     
