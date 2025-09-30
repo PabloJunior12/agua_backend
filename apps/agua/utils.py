@@ -1,10 +1,11 @@
 import datetime
 import django_filters
 import pandas as pd
-
+from django.db.models import Max, Sum, Count
+from django.utils.timezone import now, localdate
 from datetime import date
 from decimal import Decimal, InvalidOperation
-from .models import Reading, Debt
+from .models import Reading, Debt, DailyCashReport, CashBox
 
 MESES = {
     "ENERO": 1,
@@ -21,7 +22,6 @@ MESES = {
     "NOVIEMBRE": 11,
     "DICIEMBRE": 12,
 }
-
 
 def next_month_date(date_obj):
     """Devuelve la fecha correspondiente al siguiente mes, con día=1."""
@@ -121,3 +121,41 @@ def format_period(periodo):
             "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
         ]
         return f"{meses[month-1]} {year}"
+
+def generate_daily_report(cashbox: CashBox, date=None):
+    if not date:
+        date = localdate()
+
+    # saldo de ayer
+    previous_report = DailyCashReport.objects.filter(
+        cashbox=cashbox, date__lt=date
+    ).order_by("-date").first()
+    opening_balance = previous_report.closing_balance if previous_report else cashbox.opening_balance
+
+    # ingresos y egresos del día
+    movimientos = cashbox.movements.filter(created_at__date=date)
+    total_incomes = movimientos.filter(concept__type="income").aggregate(s=Sum("total"))["s"] or 0
+    total_outcomes = movimientos.filter(concept__type="outcome").aggregate(s=Sum("total"))["s"] or 0
+
+    closing_balance = opening_balance + total_incomes - total_outcomes
+
+    report, created = DailyCashReport.objects.get_or_create(
+        cashbox=cashbox,
+        date=date,
+        defaults={
+            "opening_balance": opening_balance,
+            "total_incomes": total_incomes,
+            "total_outcomes": total_outcomes,
+            "closing_balance": closing_balance,
+        }
+    )
+
+    if not created:
+        # si ya existe, actualizar montos
+        report.opening_balance = opening_balance
+        report.total_incomes = total_incomes
+        report.total_outcomes = total_outcomes
+        report.closing_balance = closing_balance
+        report.save()
+
+    return report

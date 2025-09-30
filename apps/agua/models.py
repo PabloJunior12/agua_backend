@@ -7,8 +7,6 @@ from dateutil.relativedelta import relativedelta
 from django.utils.timezone import now
 from django.conf import settings
 
-
-
 class Company(models.Model):
 
     name = models.CharField(max_length=255, verbose_name="Nombre de la empresa")
@@ -20,38 +18,6 @@ class Company(models.Model):
 
     def __str__(self):
         return self.name
-
-# class PaymentMethod(models.Model):
-
-#     state = models.BooleanField(default=True)
-#     description = models.CharField(max_length=200)
-
-#     class Meta:
-
-#         verbose_name_plural = "Tipo de metodo de pago"
-#         verbose_name = "Tipos de metodos de pagos"
-
-#     def __str__(self):
-
-#         return self.description
-
-# class Year(models.Model):
-
-#     """
-#     Representa un año (ej. 2025) para que el usuario seleccione en cuál trabajar.
-#     Puedes añadir campos extra si quieres manejar más información.
-#     """
-#     year = models.PositiveSmallIntegerField(unique=True)
-#     # Ejemplo: bandera para saber si está activo o cerrado
-#     state = models.BooleanField(default=True)
-
-#     def __str__(self):
-#         return str(self.year)
-
-#     class Meta:
-#         ordering = ['year']
-#         verbose_name = "Year Period"
-#         verbose_name_plural = "Year Periods"
 
 class Zona(models.Model):
 
@@ -132,6 +98,22 @@ class CashBox(models.Model):
 
         return f"Caja {self.id} - {self.user.username}"
 
+class DailyCashReport(models.Model):
+
+    cashbox = models.ForeignKey(CashBox, on_delete=models.CASCADE, related_name="daily_reports")
+    date = models.DateField()
+    opening_balance = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)  # saldo de ayer
+    total_incomes = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    total_outcomes = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    closing_balance = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    confirmed = models.BooleanField(default=False)  # ✅ si el usuario ya conformó
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+
+        unique_together = ("cashbox", "date")  # solo 1 reporte por caja y día
+
 class CashConcept(models.Model):
 
     code = models.CharField(max_length=3, unique=True)  # Ej. 001, 002
@@ -152,6 +134,9 @@ class Customer(models.Model):
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name="customers")
     calle = models.ForeignKey(Calle, on_delete=models.PROTECT, null=True)
     zona = models.ForeignKey(Zona, on_delete=models.PROTECT, null=True)
+    mz = models.CharField(max_length=15, blank=True, null=True)
+    lote = models.CharField(max_length=15, blank=True, null=True)
+    nro = models.CharField(max_length=15, blank=True, null=True)
 
     def __str__(self):
         return f"{self.full_name} ({self.number or 'sin DNI'})"
@@ -507,3 +492,37 @@ class ReadingGeneration(models.Model):
         Reading.objects.filter(period=self.period).delete()
         Debt.objects.filter(period=self.period).delete()
         super().delete(*args, **kwargs)
+
+
+
+ # class PaymentMethod(models.Model):
+
+#     state = models.BooleanField(default=True)
+#     description = models.CharField(max_length=200)
+
+#     class Meta:
+
+#         verbose_name_plural = "Tipo de metodo de pago"
+#         verbose_name = "Tipos de metodos de pagos"
+
+#     def __str__(self):
+
+#         return self.description
+
+# class Year(models.Model):
+
+#     """
+#     Representa un año (ej. 2025) para que el usuario seleccione en cuál trabajar.
+#     Puedes añadir campos extra si quieres manejar más información.
+#     """
+#     year = models.PositiveSmallIntegerField(unique=True)
+#     # Ejemplo: bandera para saber si está activo o cerrado
+#     state = models.BooleanField(default=True)
+
+#     def __str__(self):
+#         return str(self.year)
+
+#     class Meta:
+#         ordering = ['year']
+#         verbose_name = "Year Period"
+#         verbose_name_plural = "Year Periods"

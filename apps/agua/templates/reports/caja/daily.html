@@ -80,9 +80,6 @@
         </div>
     </div>
 
-    <!-- Reporte por conceptos -->
-    {% for concepto in conceptos %}
-    <!-- <h3>{{ concepto.concepto }}</h3> -->
     <table>
         <thead>
             <tr>
@@ -90,12 +87,18 @@
                 <th>Fecha</th>
                 <th>Cliente</th>
                 <th>Dirección</th>
-                <th>Período(s)</th> <!-- 👈 Nueva columna -->
-                <!-- <th>Métodos de Pago</th> -->
+                <th>Período(s)</th>
                 <th class="right">Total</th>
             </tr>
         </thead>
         <tbody>
+            {% for concepto in conceptos %}
+            <!-- Fila de encabezado para el concepto -->
+            <tr style="background:#f0f0f0; font-weight:bold;">
+                <td colspan="6">{{ concepto.concepto }}</td>
+            </tr>
+
+            <!-- Facturas de este concepto -->
             {% for factura in concepto.facturas %}
             <tr>
                 <td>{{ factura.code }}</td>
@@ -109,12 +112,58 @@
                     -
                     {% endif %}
                 </td>
-                <!-- <td>
+                <td class="right">{{ factura.total|floatformat:2 }}</td>
+            </tr>
+            {% endfor %}
+
+            <!-- Total del concepto -->
+            <tr class="total" style="font-weight:bold;">
+                <td colspan="5" class="right">Sub Total</td>
+                <td class="right">{{ concepto.total|floatformat:2 }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <h3 style="text-align:right; margin-top:20px;">
+        <!-- Total General: S/ {{ report.closing_balance }} -->
+        Total S/ {{ total_general|floatformat:2 }}
+    </h3>
+
+    <!-- Reporte por conceptos -->
+    <!-- {% for concepto in conceptos %}
+    <table>
+        <thead>
+            <tr>
+                <th>Código Factura</th>
+                <th>Fecha</th>
+                <th>Cliente</th>
+                <th>Dirección</th>
+                <th>Período(s)</th> -->
+    <!-- <th>Métodos de Pago</th> -->
+    <!-- <th class="right">Total</th>
+            </tr>
+        </thead>
+        <tbody> -->
+    <!-- {% for factura in concepto.facturas %}
+            <tr>
+                <td>{{ factura.code }}</td>
+                <td>{{ factura.date|date:"d/m/Y" }}</td>
+                <td>{{ factura.cliente }}</td>
+                <td>{{ factura.direccion }}</td>
+                <td>
+                    {% if factura.periodo %}
+                    {{ factura.periodo }}
+                    {% else %}
+                    -
+                    {% endif %}
+                </td> -->
+    <!-- <td>
                     {% for metodo, monto in factura.pagos.items %}
                     {{ metodo|title }}: {{ monto|floatformat:2 }}<br>
                     {% endfor %}
                 </td> -->
-                <td class="right">{{ factura.total|floatformat:2 }}</td>
+    <!-- <td class="right">{{ factura.total|floatformat:2 }}</td>
             </tr>
             {% endfor %}
             <tr class="total">
@@ -123,36 +172,57 @@
             </tr>
         </tbody>
     </table>
-    {% endfor %}
+    {% endfor %} -->
+
+    <div style="display: flex; justify-content: space-between;">
+        <div style="width: 48%;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Método</th>
+                        <th class="right">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for metodo in metodos %}
+                    <tr>
+                        <td>{{ metodo.metodo }}</td>
+                        <td class="right">{{ metodo.total|floatformat:2 }}</td>
+                    </tr>
+                    {% endfor %}
+                    <tr class="total">
+                        <td>Total General</td>
+                        <td class="right">{{ total_general|floatformat:2 }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div style="width: 48%;">
+            <table>
+                <tr>
+                    <th>Saldo inicial</th>
+                    <td>S/ {{ report.opening_balance }}</td>
+                </tr>
+                <tr>
+                    <th>Total Ingresos</th>
+                    <td>S/ {{ report.total_incomes }}</td>
+                </tr>
+                <tr>
+                    <th>Total Egresos</th>
+                    <td>S/ {{ report.total_outcomes}}</td>
+                </tr>
+                <tr class="totals">
+                    <th>Saldo final</th>
+                    <td>S/ {{ report.closing_balance }}</td>
+                </tr>
+            </table>
+        </div>
+    </div>
 
     <!-- Total general -->
-    <h2 style="text-align:right; margin-top:20px;">
-        Total General: S/ {{ total_general|floatformat:2 }}
-    </h2>
 
-    <h3>Resumen por método de pago</h3>
-    <div style="width: 50%;">
-        <table>
-            <thead>
-                <tr>
-                    <th>Método</th>
-                    <th class="right">Total</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for metodo in metodos %}
-                <tr>
-                    <td>{{ metodo.metodo }}</td>
-                    <td class="right">{{ metodo.total|floatformat:2 }}</td>
-                </tr>
-                {% endfor %}
-                <tr class="total">
-                    <td>Total General</td>
-                    <td class="right">{{ total_general|floatformat:2 }}</td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
+
 
 </body>
 

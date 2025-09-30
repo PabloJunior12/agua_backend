@@ -23,10 +23,10 @@ from weasyprint import HTML, CSS
 from collections import defaultdict
 from babel.dates import format_date
 from decimal import Decimal
-from .models import Customer, WaterMeter, CashBox, Reading, DebtDetail, CashConcept, Invoice, Category, Via, Calle, InvoiceDebt, InvoicePayment, Zona, Debt, ReadingGeneration, Company
+from .models import Customer, DailyCashReport, WaterMeter, CashBox, Reading, DebtDetail, CashConcept, Invoice, Category, Via, Calle, InvoiceDebt, InvoicePayment, Zona, Debt, ReadingGeneration, Company
 from .serializers import (
     CustomerSerializer, WaterMeterSerializer, ViaSerializer, CalleSerializer, DebtSerializer, CashBoxSerializer, CustomerWithDebtsSerializer,
-    ReadingSerializer,  InvoiceSerializer, CategorySerializer, ZonaSerializer, ReadingGenerationSerializer, CashConceptSerializer
+    ReadingSerializer,  InvoiceSerializer, CategorySerializer, ZonaSerializer, ReadingGenerationSerializer, CashConceptSerializer, DailyCashReportSerializer
 )
 
 from PyPDF2 import PdfMerger 
@@ -37,7 +37,7 @@ import os
 import tempfile
 import zipfile
 
-from .utils import ReadingFilter, DebtFilter, to_none_if_empty, to_decimal_or_none, generar_periodos, format_period
+from .utils import ReadingFilter, DebtFilter, to_none_if_empty, to_decimal_or_none, generar_periodos, format_period, generate_daily_report
 
 class CustomPagination(PageNumberPagination):
 
@@ -151,7 +151,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
             return Response({'error': f'Error al leer el archivo: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Obtenemos la zona por defecto (sin zona)
-        default_zona = Zona.objects.filter(name__iexact="sin zona").first()
+        default_zona = Zona.objects.filter(name__iexact="SIN ZONA").first()
 
         for index, row in df.iterrows():
 
@@ -171,13 +171,19 @@ class CustomerViewSet(viewsets.ModelViewSet):
                 number = "00000000"  # Valor por defecto si está vacío o no es válido
 
             full_name = to_none_if_empty(row.get('Usuario/Cliente'))
-            address = to_none_if_empty(row.get('Direccion'))
+           
             calle_dir = row.get('cod_direc')
+            print(type(calle_dir), calle_dir)
             zona_name = to_none_if_empty(row.get('Barrio'))
             
+            nro = to_none_if_empty(row.get("Nro."))
+            mz = to_none_if_empty(row.get("Mzna."))
+            lote = to_none_if_empty(row.get("Lote"))
+
+
             if zona_name:
 
-                zona_name = zona_name.strip().lower()
+                zona_name = zona_name.strip().upper()
                 zona = Zona.objects.filter(name__iexact=zona_name).first()
                 if not zona:
                     zona = default_zona
@@ -191,8 +197,18 @@ class CustomerViewSet(viewsets.ModelViewSet):
             else:
                 calle_dir = int(str(calle_dir).strip())
 
+            print(calle_dir)
             calle = Calle.objects.get(pk = calle_dir)
 
+            parts = [
+                f"{calle.via.name} {calle.name}",
+                f"Mz {mz}" if mz else None,
+                f"Lt {lote}" if lote else None,
+                f"N° {nro}" if nro else None,
+            ]
+
+            # eliminar None y unir
+            address = " ".join([p for p in parts if p])
             # Medidor
             code = to_none_if_empty(row.get('Cod.Medidor'))
             tiene_medidor_excel = to_none_if_empty(row.get('T.Med.'))
@@ -207,7 +223,6 @@ class CustomerViewSet(viewsets.ModelViewSet):
             # Categoría
             category_id = to_none_if_empty(row.get('cod_categ')) or 6
 
-     
             #Crear cliente
             customer = Customer.objects.create(
                 codigo=codigo,
@@ -215,6 +230,9 @@ class CustomerViewSet(viewsets.ModelViewSet):
                 full_name=full_name,
                 number=number,
                 address=address,
+                nro=nro,
+                mz=mz,
+                lote=lote,
                 has_meter=has_meter,
                 category_id=category_id,
                 calle = calle,
@@ -236,6 +254,17 @@ class CashBoxViewSet(viewsets.ModelViewSet):
     
     queryset = CashBox.objects.all()
     serializer_class = CashBoxSerializer
+
+    @action(detail=True, methods=["post"], url_path='close-cash')
+    def confirm_daily_report(self, request, pk=None):
+        cashbox = self.get_object()
+        date = request.data.get("date") or str(localdate())
+
+        report = generate_daily_report(cashbox, date)
+        report.confirmed = True
+        report.save()
+
+        return Response({"message": f"Caja del {report.date} confirmada", "closing_balance": report.closing_balance})
 
     @action(detail=True, methods=["get"])
     def report(self, request, pk=None):
@@ -368,29 +397,90 @@ class CashBoxViewSet(viewsets.ModelViewSet):
         response["Content-Disposition"] = f'filename="reporte_caja_{cashbox.id}.pdf"'
         return response
 
+class DailyCashReportViewSet(viewsets.ModelViewSet):
+    
+    queryset = DailyCashReport.objects.all()
+    serializer_class = DailyCashReportSerializer
+
     @action(detail=True, methods=["get"])
-    def report_methods(self, request, pk=None):
-        cashbox = self.get_object()
+    def report(self, request, pk=None):
 
-        # Filtros de fecha
-        start_date = request.query_params.get("start_date")
-        end_date = request.query_params.get("end_date")
-        date_param = request.query_params.get("date")
+        daily_cash = self.get_object()
 
-        movimientos = cashbox.movements.all()
+        cashbox = daily_cash.cashbox
+  
+        fecha = daily_cash.date
 
-        if start_date and end_date:
-            start = datetime.strptime(start_date, "%Y-%m-%d").date()
-            end = datetime.strptime(end_date, "%Y-%m-%d").date()
-            movimientos = movimientos.filter(created_at__date__range=(start, end))
-            reporte_tipo = f"Reporte de métodos entre {start} y {end}"
-        else:
-            if date_param:
-                fecha = datetime.strptime(date_param, "%Y-%m-%d").date()
-            else:
-                fecha = localdate()
-            movimientos = movimientos.filter(created_at__date=fecha)
-            reporte_tipo = f"Reporte de métodos - {fecha}"
+        movimientos = cashbox.movements.filter(created_at__date=fecha)
+        reporte_tipo = f"Reporte - {fecha}"
+
+        # ==========================
+        # AGRUPACIÓN POR CONCEPTO
+        # ==========================
+        conceptos_dict = defaultdict(list)
+
+        for mov in movimientos.select_related("concept", "invoice_payment__invoice__customer"):
+            concepto = mov.concept.name
+            conceptos_dict[concepto].append(mov)
+
+        conceptos_data = []
+
+        for concepto, movs in conceptos_dict.items():
+            facturas_dict = {}
+
+            for m in movs:
+                inv = m.invoice_payment.invoice if m.invoice_payment else None
+
+                if not inv or inv.status == "cancelled":
+                    continue  # ignoramos facturas anuladas
+
+                key = inv.id
+                if key not in facturas_dict:
+                    facturas_dict[key] = {
+                        "code": inv.code,
+                        "date": inv.date,
+                        "cliente": inv.customer.full_name,
+                        "direccion": inv.customer.address,
+                        "pagos": defaultdict(float),
+                        "total": 0,
+                        "periodo": "",  # 👈 string vacío por defecto
+                    }
+
+                    # 📌 Solo calcular periodo si el concepto es 001, 002 o 003
+                    if m.concept.code in ["001", "002", "003"]:
+                        periodos = list(
+                            inv.invoice_debts.select_related("debt")
+                            .values_list("debt__period", flat=True)
+                        )
+
+                        if periodos:
+                            periodos = sorted(periodos)
+                            if len(periodos) == 1:
+                                facturas_dict[key]["periodo"] = format_period(periodos[0])
+                            else:
+                                facturas_dict[key]["periodo"] = (
+                                    f"{format_period(periodos[0])} - {format_period(periodos[-1])}"
+                                )
+
+                metodo = m.invoice_payment.method if m.invoice_payment else "Desconocido"
+                facturas_dict[key]["pagos"][metodo] += float(m.total)
+                facturas_dict[key]["total"] += float(m.total)
+
+            # Convertir a lista
+            facturas_list = []
+            total_concepto = 0
+            for f in facturas_dict.values():
+                total_concepto += f["total"]
+                f["pagos"] = dict(f["pagos"])  # pasar defaultdict a dict normal
+                facturas_list.append(f)
+
+            conceptos_data.append({
+                "concepto": concepto,
+                "total": total_concepto,
+                "facturas": facturas_list,
+            })
+
+        total_general = sum(c["total"] for c in conceptos_data)
 
         # Agrupar por método de pago
         metodo_dict = defaultdict(list)
@@ -399,6 +489,7 @@ class CashBoxViewSet(viewsets.ModelViewSet):
 
         metodo_data = []
         for metodo, movs in metodo_dict.items():
+
             total_metodo = sum([
                 m.total if not (m.invoice_payment and m.invoice_payment.invoice.status == "cancelled") else 0
                 for m in movs
@@ -409,38 +500,21 @@ class CashBoxViewSet(viewsets.ModelViewSet):
                 "movimientos": movs
             })
 
-        total_general = sum([m["total"] for m in metodo_data])
-
-        # Agrupar por conceptos (igual que antes)
-        conceptos_dict = defaultdict(list)
-        for mov in movimientos.select_related("concept", "invoice_payment__invoice__customer"):
-            conceptos_dict[mov.concept].append(mov)
-
-        conceptos_data = []
-        for concept, movs in conceptos_dict.items():
-            total_concepto = sum([
-                m.total if not (m.invoice_payment and m.invoice_payment.invoice.status == "cancelled") else 0
-                for m in movs
-            ])
-            conceptos_data.append({
-                "concept": concept,
-                "total": total_concepto,
-            })
-
-
-        html_string = render_to_string("reports/caja/methods.html", {
+        html_string = render_to_string("reports/caja/daily.html", {
             "cashbox": cashbox,
-            "metodos": metodo_data,
             "conceptos": conceptos_data,
             "total_general": total_general,
             "reporte_tipo": reporte_tipo,
+            "metodos": metodo_data,
+            "report": daily_cash,
         })
+
+        print(daily_cash)
 
         pdf = HTML(string=html_string).write_pdf()
         response = HttpResponse(pdf, content_type="application/pdf")
-        response["Content-Disposition"] = f'filename="reporte_metodos_{cashbox.id}.pdf"'
+        response["Content-Disposition"] = f'filename="reporte_caja_{cashbox.id}.pdf"'
         return response
-
 
 class WaterMeterViewSet(viewsets.ModelViewSet):
     
@@ -453,7 +527,6 @@ class ReadingViewSet(viewsets.ModelViewSet):
     serializer_class = ReadingSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     filterset_class = ReadingFilter
-
 
     def perform_update(self, serializer):
         instance = self.get_object()
@@ -678,8 +751,13 @@ class ReadingViewSet(viewsets.ModelViewSet):
     def receipt(self, request, pk=None):
         """
         Generar PDF de un solo recibo (para pruebas o impresion individual)
-        """
-        reading = self.get_object()
+        """ 
+        print(pk)
+        reading = Reading.objects.filter(customer_id=pk).order_by('-period').first()
+        if not reading:
+
+            return Response({"error": "No hay lecturas registradas"}, status=404)
+        
         company = Company.objects.first()
 
         # obtener deudas anteriores no pagadas
@@ -721,7 +799,7 @@ class ReadingViewSet(viewsets.ModelViewSet):
             "total_general": total_general,
         }]
 
-        html = render_to_string("agua/invoice_template.html", {
+        html = render_to_string("agua/recibo.html", {
             "readings_context": readings_context,
             "company": company,
         })
@@ -759,7 +837,8 @@ class ReadingGenerationViewSet(viewsets.ModelViewSet):
 
         # validar si ya existe
         if ReadingGeneration.objects.filter(period=period_date).exists():
-            return Response({"message": f"Ya se generaron lecturas para {period_str}"}, status=200)
+
+            return Response({"error": f"Ya se generaron lecturas para {period_str}"}, status=status.HTTP_400_BAD_REQUEST)
 
         customers = Customer.objects.filter(has_meter=False)
         created = 0
@@ -799,6 +878,23 @@ class ReadingGenerationViewSet(viewsets.ModelViewSet):
 
         return Response({ "message": f"Se generaron {created} lecturas para el periodo {period_str}" }, status=status.HTTP_201_CREATED)
 
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+
+        # Borrar lecturas generadas en ese periodo (solo las no pagadas)
+        Reading.objects.filter(
+            period=instance.period,
+            customer__has_meter=False,
+        ).delete()
+
+        # Eliminar la generación
+        instance.delete()
+
+        return Response(
+            {"message": f"Generación del periodo {instance.period.strftime('%Y-%m')} eliminada correctamente."},
+            status=status.HTTP_204_NO_CONTENT
+        )
+
     @action(detail=True, methods=['get'])
     def download_receipts(self, request, pk=None):
         """
@@ -831,7 +927,7 @@ class ReadingGenerationViewSet(viewsets.ModelViewSet):
             # Generar 1 PDF por zona
             for zona, zona_readings in zonas.items():
                 html_content = render_to_string(
-                    "agua/invoice_template.html",
+                    "agua/recibo.html",
                     {"readings": zona_readings, "zona": zona}
                 )
                 pdf_bytes = HTML(string=html_content).write_pdf()
@@ -854,15 +950,17 @@ class ReadingGenerationViewSet(viewsets.ModelViewSet):
         generation = self.get_object()
         readings = Reading.objects.filter(period=generation.period)
         
-        zona_id = request.query_params.get("zona")
+        calle_id = request.query_params.get("calle")
 
-        if zona_id:
+        calle = Calle.objects.get(pk = calle_id)
+
+        if calle_id:
             
-            readings = readings.filter(customer__zona_id=zona_id)
+            readings = readings.filter(customer__calle_id=calle_id)
 
         if not readings.exists():
             return Response(
-                {"error": "No hay lecturas con zona asignada para este periodo"},
+                {"error": "No hay lecturas con calle asignada para este periodo"},
                 status=400
             )
 
@@ -908,7 +1006,7 @@ class ReadingGenerationViewSet(viewsets.ModelViewSet):
             })
 
         # Renderizamos todos los recibos (un reading por página)
-        html_content = render_to_string("agua/invoice_template.html", {
+        html_content = render_to_string("agua/recibo.html", {
             "readings_context": all_readings_context,
             "company": company,
         })
@@ -918,7 +1016,7 @@ class ReadingGenerationViewSet(viewsets.ModelViewSet):
         # Devolvemos directamente el PDF
         response = HttpResponse(pdf_bytes, content_type="application/pdf")
         response["Content-Disposition"] = (
-            f'attachment; filename="recibos_{generation.period.strftime("%Y-%m")}.pdf"'
+            f'attachment; filename="{calle.name}_{generation.period.strftime("%Y-%m")}.pdf"'
         )
 
         return response
@@ -1151,11 +1249,6 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         invoice.cancel()
         return Response({"message": "Factura anulada"}, status=status.HTTP_200_OK)
 
-# class CompanyViewSet(ModelViewSet):
-
-#     queryset = Company.objects.all()
-#     serializer_class = CompanySerializer
-
 class CashConceptViewSet(viewsets.ModelViewSet):
 
     queryset = CashConcept.objects.all() 
@@ -1312,3 +1405,7 @@ class ZonaViewSet(viewsets.ModelViewSet):
     filter_backends = [filters.SearchFilter]
     search_fields = ['codigo','name']
 
+# class CompanyViewSet(ModelViewSet):
+
+#     queryset = Company.objects.all()
+#     serializer_class = CompanySerializer

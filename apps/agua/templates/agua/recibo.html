@@ -102,6 +102,7 @@
                 <span>Recibo N° {{ reading.id }}</span>
             </div>
         </div>
+
         <div class="col">
             <div class="d-flex justify-content-end">
                 <div class="d-flex flex-column text-center customer">
@@ -115,8 +116,8 @@
 
     <div class="d-flex flex-column customer">
         <span><strong>{{ reading.customer.full_name }}</strong></span>
-        <span><strong>DNI/RUC:</strong> {{ reading.customer.number }}</span>
-        <span><strong>Dirección:</strong> {{ reading.customer.address }}</span>
+        <span><strong>DNI/RUC:</strong>{{ reading.customer.number }}</span>
+        <span><strong>Dirección:</strong>{{ reading.customer.address }}</span>
         <span><strong>Horario de Suministro:</strong> DE 06:00 AM A 10:00 PM</span>
     </div>
 
@@ -203,7 +204,7 @@
                 </tr>
                 <tr>
                     <th>Cargo fijo</th>
-                    <td class="text-end">0.00</td>
+                    <td class="text-end">{{ reading.total_fixed_charge }}</td>
                 </tr>
                 <tr>
                     <th>Total del mes</th>

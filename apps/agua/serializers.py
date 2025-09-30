@@ -2,8 +2,7 @@ from rest_framework import serializers
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils.timezone import now
 from django.conf import settings
-from .models import Customer, WaterMeter, CashBox, CashMovement, DebtDetail, CashConcept, Reading, ReadingGeneration, Invoice, Category, Via, Calle, InvoiceDebt, Zona, Debt, InvoicePayment
-# from .models import Year, Category, Zona, Calle, Cash, Reading,  Invoice, Customer, Company, PaymentMethod, Service, Tariff
+from .models import Customer, WaterMeter, CashBox, CashMovement, DebtDetail, CashConcept, Reading, ReadingGeneration, Invoice, Category, Via, Calle, InvoiceDebt, Zona, Debt, InvoicePayment, DailyCashReport
 from .utils import next_month_date
 from django.db import transaction
 from django.db.models import Sum
@@ -132,6 +131,13 @@ class CashBoxSerializer(serializers.ModelSerializer):
     class Meta:
 
         model = CashBox
+        fields = '__all__'
+
+class DailyCashReportSerializer(serializers.ModelSerializer):
+
+    class Meta:
+
+        model = DailyCashReport
         fields = '__all__'
 
 class CashConceptSerializer(serializers.ModelSerializer):
@@ -338,6 +344,13 @@ class InvoiceSerializer(serializers.ModelSerializer):
 
         return invoice
     
+class ViaSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        
+        model = Via
+        fields = '__all__'
+
 # class CompanySerializer(serializers.ModelSerializer):
 
 #     class Meta:
@@ -373,91 +386,4 @@ class InvoiceSerializer(serializers.ModelSerializer):
 #     class Meta:
         
 #         model = Year
-#         fields = '__all__'
-
-class ViaSerializer(serializers.ModelSerializer):
-
-    class Meta:
-        
-        model = Via
-        fields = '__all__'
-
-
-# class ZonaSerializer(serializers.ModelSerializer):
-
-#     class Meta:
-#         model = Zona
-#         fields = '__all__'
-
-# class CalleSerializer(serializers.ModelSerializer):
-    
-#     class Meta:
-
-#         model = Calle
-#         fields = '__all__'
-
-#     def to_representation(self, instance):
-
-#         representation = super().to_representation(instance)
-
-#         if instance.zona:
-
-#             representation['zona'] = {
-#                 'id': instance.zona.id,
-#                 'name': instance.zona.name
-#             }
-
-#         return representation
-
-# class InvoiceSerializer(serializers.ModelSerializer):
-
-#     class Meta:
-#         model = Invoice
-#         fields = '__all__'
-
-#     def to_representation(self, instance):
-#         data = super().to_representation(instance)
-#         if instance.customer:
-#             data['customer'] = {
-#                 'id': instance.customer.id,
-#                 'full_name': instance.customer.full_name,
-#                 'number' : instance.customer.number,
-#                 'meter_code' : instance.customer.meter_code,
-#             }
-#         return data
-
-# class ServiceSerializer(serializers.ModelSerializer):
-
-#     class Meta:
-#         model = Service
-#         fields = '__all__'
-
-# class TariffSerializer(serializers.ModelSerializer):
-
-#     class Meta:
-#         model = Tariff
-#         fields = '__all__'
-
-#     def to_representation(self, instance):
-
-#         data = super().to_representation(instance)
-#         if instance.service:
-#            data['service'] = {
-#                'id' : instance.service.id,
-#                'name' : instance.service.name
-#            }
-
-#         if instance.category:
-#            data['category'] = {
-#                'id' : instance.category.id,
-#                'name' : instance.category.name
-#            }
-
-#         return data
-
-# class CashSerializer(serializers.ModelSerializer):
-
-#     class Meta:
-        
-#         model = Cash
 #         fields = '__all__'
