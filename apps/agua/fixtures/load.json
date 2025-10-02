@@ -17,19 +17,7 @@
       "user": 1,
       "opening_date": "2025-09-15T10:00:00Z",
       "closing_date": null,
-      "opening_balance": "100.00",
-      "closing_balance": "0.00",
-      "status": "open"
-    }
-  },
-  {
-    "model": "agua.cashbox",
-    "pk": 1,
-    "fields": {
-      "user": 1,
-      "opening_date": "2025-09-15T10:00:00Z",
-      "closing_date": null,
-      "opening_balance": "100.00",
+      "opening_balance": "0.00",
       "closing_balance": "0.00",
       "status": "open"
     }
