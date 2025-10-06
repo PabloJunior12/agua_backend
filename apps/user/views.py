@@ -6,8 +6,8 @@ from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
 from rest_framework import status
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.pagination import PageNumberPagination
-from .serializers import UserSerializer
-from .models import User
+from .serializers import UserSerializer, ModuleSerializer, UserPermissionSerializer
+from .models import User, Module, UserPermission
 
 import requests
 
@@ -18,10 +18,11 @@ class CustomPagination(PageNumberPagination):
     max_page_size = 100  # Tamaño máximo permitido
 
 class LoginView(APIView):
+
     permission_classes = [AllowAny]
 
     def post(self, request):
-        username = request.data.get('username')  # Ahora esperas 'username'
+        username = request.data.get('username')
         password = request.data.get('password')
 
         if not username or not password:
@@ -29,14 +30,37 @@ class LoginView(APIView):
 
         user = authenticate(request, username=username, password=password)
         if user is not None:
-            if user.is_active:
-                token, created = Token.objects.get_or_create(user=user)
-                return Response({"token": token.key}, status=200)
-            else:
+            if not user.is_active:
                 return Response({"error": "Cuenta desactivada."}, status=403)
-        else:
-            return Response({"error": "Credenciales inválidas."}, status=401)
-        
+
+            # Crear o recuperar token
+            token, created = Token.objects.get_or_create(user=user)
+
+            # Obtener permisos del usuario
+            permissions = UserPermission.objects.filter(user=user).select_related('module')
+
+            permissions_data = [
+                {
+                    "module_id": perm.module.id,
+                    "module": perm.module.code,
+                    "name": perm.module.name,
+                }
+                for perm in permissions
+            ]
+
+            user_data = {
+                "id": user.id,
+                "username": user.username,
+                "name": user.name,
+                "is_admin": user.is_admin,
+                "token": token.key,
+                "permissions": permissions_data,
+            }
+
+            return Response(user_data, status=200)
+
+        return Response({"error": "Credenciales inválidas."}, status=401)
+      
 class LogoutView(APIView):
 
     permission_classes = [IsAuthenticated]
@@ -119,8 +143,60 @@ class DniApiView(APIView):
             )
         
 class UserViewSet(ModelViewSet):
-    
-    queryset = User.objects.all().order_by('id')
+
+    queryset = User.objects.all()
     serializer_class = UserSerializer
-    permission_classes = [IsAdminUser]
     pagination_class = CustomPagination
+
+    def get_queryset(self):
+        # filtrar para que no aparezcan usuarios con is_staff=True
+        return User.objects.filter(is_staff=False).order_by('id')
+
+class ModuleViewSet(ModelViewSet):
+
+    queryset = Module.objects.all()
+    serializer_class = ModuleSerializer
+
+class UserPermissionViewSet(ModelViewSet):
+
+    queryset = UserPermission.objects.all()
+    serializer_class = UserPermissionSerializer
+
+    def get_queryset(self):
+
+        user_id = self.request.query_params.get('user')
+        if user_id:
+            return UserPermission.objects.filter(user_id=user_id)
+        return super().get_queryset()
+
+class MeView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        
+        user = request.user
+
+        # Obtener permisos del usuario
+        permissions = UserPermission.objects.filter(user=user).select_related('module')
+
+        permissions_data = [
+            {
+                "module_id": perm.module.id,
+                "module": perm.module.code,
+                "name": perm.module.name,
+            }
+            for perm in permissions
+        ]
+
+        user_data = {
+            "id": user.id,
+            "username": user.username,
+            "name": user.name,
+            "is_admin": user.is_admin,
+            "is_staff": user.is_staff,
+            "email": user.email,
+            "permissions": permissions_data,
+        }
+
+        return Response(user_data, status=200)

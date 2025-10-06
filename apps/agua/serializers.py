@@ -2,7 +2,7 @@ from rest_framework import serializers
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils.timezone import now
 from django.conf import settings
-from .models import Customer, WaterMeter, CashBox, CashMovement, DebtDetail, CashConcept, Reading, ReadingGeneration, Invoice, Category, Via, Calle, InvoiceDebt, Zona, Debt, InvoicePayment, DailyCashReport
+from .models import Customer, WaterMeter, CashBox, Company, Notificacion, CashMovement, DebtDetail, CashConcept, Reading, ReadingGeneration, Invoice, Category, Via, Calle, InvoiceDebt, Zona, Debt, InvoicePayment, DailyCashReport
 from .utils import next_month_date
 from django.db import transaction
 from django.db.models import Sum
@@ -289,20 +289,48 @@ class InvoiceSerializer(serializers.ModelSerializer):
         debts_data = validated_data.pop('invoice_debts', [])
         payments_data = validated_data.pop('invoice_payments', [])
 
-        with transaction.atomic():
-            # Crear factura base
-            invoice = Invoice.objects.create(**validated_data)
+        # Extraemos las deudas seleccionadas (objetos Debt)
+        selected_debts = [item['debt'] for item in debts_data]
 
+        if selected_debts:
+            # Ordenar por periodo
+            selected_debts = sorted(selected_debts, key=lambda d: d.period)
+
+            # Obtener todas las deudas impagas del cliente
+            customer = validated_data['customer']
+            all_unpaid = Debt.objects.filter(customer=customer, paid=False).order_by("period")
+
+            if all_unpaid.exists():
+                first_unpaid = all_unpaid.first().period
+
+                # ✅ Validar que la primera seleccionada sea la más antigua impaga
+                if selected_debts[0].period != first_unpaid:
+                    raise serializers.ValidationError({
+                        "error": f"Debes pagar empezando desde {first_unpaid.strftime('%m-%Y')}."
+                    })
+
+            # ✅ Validar que los periodos seleccionados sean consecutivos
+            for i in range(1, len(selected_debts)):
+                prev = selected_debts[i-1].period
+                curr = selected_debts[i].period
+                diff = (curr.year - prev.year) * 12 + (curr.month - prev.month)
+                if diff != 1:
+                    raise serializers.ValidationError({
+                        "error": "Las deudas deben pagarse en meses consecutivos."
+                    })
+
+        with transaction.atomic():
+            invoice = Invoice.objects.create(**validated_data)
             total = 0
+
             for item in debts_data:
-                debt = item['debt']  # aquí debería ser instancia de Debt si usas PKRelatedField
+                debt = item['debt']
                 InvoiceDebt.objects.create(invoice=invoice, debt=debt, total=debt.amount)
 
                 # Marcar deuda como pagada
                 debt.paid = True
                 debt.save()
 
-                # marcar lectura asociada pagada (si existe)
                 if debt.reading:
                     debt.reading.paid = True
                     debt.reading.save(skip_process=True)
@@ -319,21 +347,20 @@ class InvoiceSerializer(serializers.ModelSerializer):
                     cashbox=item['cashbox']
                 )
 
-                # 🔹 Generar movimientos de caja por cada detalle de deuda
+                # Generar movimientos de caja por cada detalle de deuda
                 for inv_debt in invoice.invoice_debts.all():
                     for detail in inv_debt.debt.details.all():
                         CashMovement.objects.create(
                             cashbox=item['cashbox'],
-                            concept=detail.concept,  # 👈 ahora se reparte por concepto real
+                            concept=detail.concept,
                             method=item['method'],
-                            total=detail.amount,     # 👈 reflejamos el monto de ese concepto
+                            total=detail.amount,
                             reference=item.get('reference'),
                             invoice_payment=payment
                         )
 
                 payments_total += item['total']
 
-            # Validar que cuadren pagos y total
             if round(payments_total, 2) != round(total, 2):
                 raise serializers.ValidationError({
                     "payments": f"Los pagos ({payments_total}) no cuadran con el total ({total})"
@@ -343,7 +370,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
             invoice.save()
 
         return invoice
-    
+ 
 class ViaSerializer(serializers.ModelSerializer):
 
     class Meta:
@@ -351,28 +378,34 @@ class ViaSerializer(serializers.ModelSerializer):
         model = Via
         fields = '__all__'
 
-# class CompanySerializer(serializers.ModelSerializer):
+class NotificacionSerializer(serializers.ModelSerializer):
 
-#     class Meta:
-#         model = Company
-#         fields = '__all__'
+    class Meta:
+        model = Notificacion
+        fields = ["id", "mensaje", "fecha", "leido"]
 
-#     def update(self, instance, validated_data):
-#         # Verificar si hay un nuevo logo
-#         new_logo = validated_data.get("logo", None)
-#         if new_logo and instance.logo:
-#             # Eliminar el logo anterior del sistema de archivos
-#             old_logo_path = os.path.join(settings.MEDIA_ROOT, str(instance.logo))
-#             if os.path.exists(old_logo_path):
-#                 os.remove(old_logo_path)
+class CompanySerializer(serializers.ModelSerializer):
 
-#         instance.logo = new_logo if new_logo else instance.logo  # Mantener el anterior si no se envía nuevo
-#         instance.name = validated_data.get("name", instance.name)
-#         instance.ruc = validated_data.get("ruc", instance.ruc)
-#         instance.address = validated_data.get("address", instance.address)
+    class Meta:
+        model = Company
+        fields = '__all__'
 
-#         instance.save()
-#         return instance
+    def update(self, instance, validated_data):
+        # Verificar si hay un nuevo logo
+        new_logo = validated_data.get("logo", None)
+        if new_logo and instance.logo:
+            # Eliminar el logo anterior del sistema de archivos
+            old_logo_path = os.path.join(settings.MEDIA_ROOT, str(instance.logo))
+            if os.path.exists(old_logo_path):
+                os.remove(old_logo_path)
+
+        instance.logo = new_logo if new_logo else instance.logo  # Mantener el anterior si no se envía nuevo
+        instance.name = validated_data.get("name", instance.name)
+        instance.ruc = validated_data.get("ruc", instance.ruc)
+        instance.address = validated_data.get("address", instance.address)
+
+        instance.save()
+        return instance
 
 # class PaymentMethodSerializer(serializers.ModelSerializer):
 

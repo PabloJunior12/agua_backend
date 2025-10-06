@@ -7,6 +7,7 @@ from dateutil.relativedelta import relativedelta
 from django.utils.timezone import now
 from django.conf import settings
 
+
 class Company(models.Model):
 
     name = models.CharField(max_length=255, verbose_name="Nombre de la empresa")
@@ -159,9 +160,9 @@ class Reading(models.Model):
     date_of_due = models.DateField(null=True)
     date_of_cute = models.DateField(null=True)
 
-    current_reading = models.DecimalField(max_digits=10, decimal_places=2)
-    previous_reading = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
-    consumption = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    current_reading = models.DecimalField(max_digits=10, decimal_places=3)
+    previous_reading = models.DecimalField(max_digits=10, decimal_places=3, default=0.000)
+    consumption = models.DecimalField(max_digits=10, decimal_places=3, default=0.000)
 
     total_water = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     total_sewer = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
@@ -198,12 +199,12 @@ class Reading(models.Model):
                 self.previous_reading = previous.current_reading
                 self.consumption = self.current_reading - previous.current_reading
             else:
-                self.previous_reading = Decimal('0.00')
+                self.previous_reading = Decimal('0.000')
                 self.consumption = self.current_reading
         else:
             # Sin medidor: todo fijo
-            self.previous_reading = Decimal('0.00')
-            self.consumption = Decimal('0.00')
+            self.previous_reading = Decimal('0.000')
+            self.consumption = Decimal('0.000')
 
     def calculate_industrial_tariff(self, tariff):
         """Calcula tarifa INDUSTRIAL con exceso"""
@@ -221,8 +222,8 @@ class Reading(models.Model):
                 self.total_water = self.consumption * tariff.price_water
         else:
             self.total_water = tariff.price_water
-            self.previous_reading = Decimal('0.00')
-            self.consumption = Decimal('0.00')
+            self.previous_reading = Decimal('0.000')
+            self.consumption = Decimal('0.000')
 
         self.total_sewer = tariff.price_sewer
         self.total_fixed_charge = Decimal('3.00')
@@ -493,9 +494,17 @@ class ReadingGeneration(models.Model):
         Debt.objects.filter(period=self.period).delete()
         super().delete(*args, **kwargs)
 
-
-
  # class PaymentMethod(models.Model):
+
+class Notificacion(models.Model):
+
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    mensaje = models.TextField()
+    fecha = models.DateTimeField(auto_now_add=True)
+    leido = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"{self.usuario.username} - {self.mensaje[:30]}"
 
 #     state = models.BooleanField(default=True)
 #     description = models.CharField(max_length=200)

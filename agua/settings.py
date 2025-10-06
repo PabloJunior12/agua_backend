@@ -127,7 +127,7 @@ USE_TZ = True
 AUTH_USER_MODEL = 'user.User'
 
 CORS_ALLOWED_ORIGINS = [
-    "https://pangoa.umg.jsistemas.info",
+    "https://pangoa.sistemasinfo.pe",
     "http://localhost:4200", 
 ]
 

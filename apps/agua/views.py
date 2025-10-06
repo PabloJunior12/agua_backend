@@ -12,7 +12,7 @@ from dateutil.relativedelta import relativedelta
 
 from rest_framework.views import APIView
 from rest_framework import filters, status, viewsets
-from rest_framework.decorators import action
+from rest_framework.decorators import action, authentication_classes
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
@@ -23,10 +23,11 @@ from weasyprint import HTML, CSS
 from collections import defaultdict
 from babel.dates import format_date
 from decimal import Decimal
-from .models import Customer, DailyCashReport, WaterMeter, CashBox, Reading, DebtDetail, CashConcept, Invoice, Category, Via, Calle, InvoiceDebt, InvoicePayment, Zona, Debt, ReadingGeneration, Company
+from apps.user.models import User
+from .models import Customer, DailyCashReport, WaterMeter, Notificacion, CashBox, Reading, DebtDetail, CashConcept, Invoice, Category, Via, Calle, InvoiceDebt, InvoicePayment, Zona, Debt, ReadingGeneration, Company
 from .serializers import (
-    CustomerSerializer, WaterMeterSerializer, ViaSerializer, CalleSerializer, DebtSerializer, CashBoxSerializer, CustomerWithDebtsSerializer,
-    ReadingSerializer,  InvoiceSerializer, CategorySerializer, ZonaSerializer, ReadingGenerationSerializer, CashConceptSerializer, DailyCashReportSerializer
+    CustomerSerializer, WaterMeterSerializer, ViaSerializer, CompanySerializer, CalleSerializer, DebtSerializer, CashBoxSerializer, CustomerWithDebtsSerializer,
+    ReadingSerializer,  InvoiceSerializer, CategorySerializer, ZonaSerializer, ReadingGenerationSerializer, CashConceptSerializer, DailyCashReportSerializer, NotificacionSerializer
 )
 
 from PyPDF2 import PdfMerger 
@@ -54,7 +55,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
     search_fields = ['codigo', 'full_name', 'number']
 
     # filtros exactos
-    filterset_fields = ['codigo','zona']  
+    filterset_fields = ['codigo','zona','calle']  
 
     def create(self, request, *args, **kwargs):
         data = request.data
@@ -1405,7 +1406,34 @@ class ZonaViewSet(viewsets.ModelViewSet):
     filter_backends = [filters.SearchFilter]
     search_fields = ['codigo','name']
 
-# class CompanyViewSet(ModelViewSet):
+class NotificacionViewSet(viewsets.ModelViewSet):
 
-#     queryset = Company.objects.all()
-#     serializer_class = CompanySerializer
+    queryset = Notificacion.objects.all().order_by("-id")
+    serializer_class = NotificacionSerializer
+
+    # @authentication_classes([])
+    @action(detail=False, methods=['post'])
+    def yape(self, request, pk=None):
+     
+        token = request.data.get("token_yape")
+        mensaje = request.data.get("mensaje")
+
+        try:
+
+            user = User.objects.get(yape_token=token)
+
+            Notificacion.objects.create(usuario=user, mensaje=mensaje)
+
+
+        except User.DoesNotExist:
+            return Response({"error": "Token inválido"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # aquí guardas la notificación en un modelo si quieres
+        # Notificacion.objects.create(user=user, mensaje=mensaje)
+
+        return Response({"ok": True, "user": user.username})
+
+class CompanyViewSet(viewsets.ModelViewSet):
+
+    queryset = Company.objects.all()
+    serializer_class = CompanySerializer
