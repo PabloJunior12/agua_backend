@@ -8,7 +8,7 @@ venv/
 
 
 # Configuración de Django (ignorar settings.py)
-settings.py
+# settings.py
 
 # Archivos de configuración del editor
 .vscode/
@@ -25,5 +25,5 @@ staticfiles/
 media/
 
 # Ignorar migraciones
-*/migrations/*
-!*/migrations/__init__.py
+# */migrations/*
+# !*/migrations/__init__.py

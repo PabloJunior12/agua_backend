@@ -127,11 +127,15 @@ USE_TZ = True
 AUTH_USER_MODEL = 'user.User'
 
 CORS_ALLOWED_ORIGINS = [
-    "https://pangoa.sistemasinfo.pe",
+    "https://ugm.pe",
     "http://localhost:4200", 
 ]
 
 CORS_ALLOW_CREDENTIALS = True
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://api.ugm.pe",
+]
 
 
 # Static files (CSS, JavaScript, Images)
