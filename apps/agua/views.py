@@ -6,7 +6,7 @@ from django.conf import settings
 from django.utils.timezone import now, localdate
 from django.utils.formats import date_format
 from django.db import transaction
-from django.db.models import Max, Sum, Count
+from django.db.models import Max, Sum, Count, Min
 
 from dateutil.relativedelta import relativedelta
 
@@ -251,6 +251,101 @@ class CustomerViewSet(viewsets.ModelViewSet):
 
         return Response({"message": "Clientes importados correctamente"}, status=status.HTTP_200_OK)
 
+    @action(detail=False, methods=["get"], url_path='report/debt')
+    def report(self,request):
+
+        calle_id = request.query_params.get("calle")
+        zona_id = request.query_params.get("zona")
+
+        debts = Debt.objects.filter(paid=False)
+
+        data = []
+
+        total_general = Decimal("0.00")
+        customers = Customer.objects.all()
+
+        calle = None
+        zona = None
+        if calle_id:
+
+            calle = Calle.objects.get(pk=calle_id)
+            customers = customers.filter(calle_id=calle_id)
+
+        if zona_id:
+
+            zona = Zona.objects.get(pk=zona_id)
+            customers = customers.filter(zona_id=zona_id)
+
+        for customer in customers:
+
+            customers_debts = debts.filter(customer=customer)
+
+            if not customers_debts.exists():
+
+               continue
+               
+            sumary = customers_debts.aggregate(
+                total=Sum("amount"),
+                min_period=Min("period"),
+                max_period=Max("period")
+            )
+
+            total_general += sumary["total"] or Decimal("0.00")
+
+            data.append({
+
+                "customer" : customer,
+                "min_period" : sumary["min_period"],
+                "max_period" : sumary["max_period"],
+                "total" : sumary["total"]
+
+            })
+     
+
+        html_string = render_to_string("customer/report.html",{
+
+            "data":data,
+            "total_general":total_general,
+            "date":datetime.now(),
+            "calle": calle,
+            "zona": zona
+
+        })
+
+        pdf = HTML(string=html_string).write_pdf()
+        response = HttpResponse(pdf, content_type="application/pdf")
+        response["Content-Disposition"] = f'filename="reporte_global_deudas.pdf"'
+        return response
+
+    @action(detail=True, methods=['get'], url_path='report/debt-history')
+    def report_debt_history(self, request, pk=None):
+        customer = self.get_object()
+        debts = customer.debts.all().order_by('period')
+
+        # Agrupar deudas por año
+        debts_by_year = defaultdict(list)
+        for debt in debts:
+            debts_by_year[debt.period.year].append(debt)
+
+        total_debt = debts.aggregate(Sum('amount'))['amount__sum'] or 0
+        total_paid = debts.filter(paid=True).aggregate(Sum('amount'))['amount__sum'] or 0
+        total_pending = total_debt - total_paid
+
+        html_string = render_to_string('customer/customer_debt_history.html', {
+            'customer': customer,
+            'debts_by_year': dict(sorted(debts_by_year.items())),
+            'total_debt': total_debt,
+            'total_paid': total_paid,
+            'total_pending': total_pending,
+            'today': datetime.now(),
+        })
+
+        pdf = HTML(string=html_string).write_pdf()
+        filename = f"Historial_{customer.full_name.replace(' ', '_')}.pdf"
+        response = HttpResponse(pdf, content_type='application/pdf')
+        response['Content-Disposition'] = f'inline; filename="{filename}"'
+        return response
+    
 class CashBoxViewSet(viewsets.ModelViewSet):
     
     queryset = CashBox.objects.all()
