@@ -2,7 +2,7 @@ from rest_framework import serializers
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils.timezone import now
 from django.conf import settings
-from .models import Customer, WaterMeter, CashBox, Company, Notificacion, CashMovement, DebtDetail, CashConcept, Reading, ReadingGeneration, Invoice, Category, Via, Calle, InvoiceDebt, Zona, Debt, InvoicePayment, DailyCashReport
+from .models import Customer, WaterMeter, CashBox, Company, Notificacion, CashOutflow, CashMovement, DebtDetail, CashConcept, Reading, ReadingGeneration, Invoice, Category, Via, Calle, InvoiceDebt, Zona, Debt, InvoicePayment, DailyCashReport
 from .utils import next_month_date
 from django.db import transaction
 from django.db.models import Sum
@@ -406,6 +406,12 @@ class CompanySerializer(serializers.ModelSerializer):
 
         instance.save()
         return instance
+
+class CashOutflowSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = CashOutflow
+        fields = "__all__"
 
 # class PaymentMethodSerializer(serializers.ModelSerializer):
 

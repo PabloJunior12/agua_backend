@@ -24,9 +24,9 @@ from collections import defaultdict
 from babel.dates import format_date
 from decimal import Decimal
 from apps.user.models import User
-from .models import Customer, DailyCashReport, WaterMeter, Notificacion, CashBox, Reading, DebtDetail, CashConcept, Invoice, Category, Via, Calle, InvoiceDebt, InvoicePayment, Zona, Debt, ReadingGeneration, Company
+from .models import Customer, DailyCashReport, WaterMeter, CashOutflow, Notificacion, CashBox, Reading, DebtDetail, CashConcept, Invoice, Category, Via, Calle, InvoiceDebt, InvoicePayment, Zona, Debt, ReadingGeneration, Company
 from .serializers import (
-    CustomerSerializer, WaterMeterSerializer, ViaSerializer, CompanySerializer, CalleSerializer, DebtSerializer, CashBoxSerializer, CustomerWithDebtsSerializer,
+    CustomerSerializer, WaterMeterSerializer, ViaSerializer, CompanySerializer, CashOutflowSerializer, CalleSerializer, DebtSerializer, CashBoxSerializer, CustomerWithDebtsSerializer,
     ReadingSerializer,  InvoiceSerializer, CategorySerializer, ZonaSerializer, ReadingGenerationSerializer, CashConceptSerializer, DailyCashReportSerializer, NotificacionSerializer
 )
 
@@ -364,6 +364,7 @@ class CashBoxViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["get"])
     def report(self, request, pk=None):
+
         cashbox = self.get_object()
 
         # 📌 Filtros de fechas
@@ -372,8 +373,10 @@ class CashBoxViewSet(viewsets.ModelViewSet):
         date_param = request.query_params.get("date")
 
         movimientos = cashbox.movements.all()
+        egresos = cashbox.outflows.all()
 
         if start_date and end_date:
+
             try:
                 start = datetime.strptime(start_date, "%Y-%m-%d").date()
                 end = datetime.strptime(end_date, "%Y-%m-%d").date()
@@ -381,8 +384,11 @@ class CashBoxViewSet(viewsets.ModelViewSet):
                 return Response({"error": "Formato de fecha inválido (use YYYY-MM-DD)"}, status=400)
 
             movimientos = movimientos.filter(created_at__date__range=(start, end))
+            egresos = egresos.filter(created_at__date__range=(start, end))
             reporte_tipo = f"Reporte entre {start} y {end}"
+
         else:
+
             if date_param:
                 try:
                     fecha = datetime.strptime(date_param, "%Y-%m-%d").date()
@@ -392,6 +398,7 @@ class CashBoxViewSet(viewsets.ModelViewSet):
                 fecha = localdate()
 
             movimientos = movimientos.filter(created_at__date=fecha)
+            egresos = egresos.filter(created_at__date=fecha)
             reporte_tipo = f"Reporte diario - {fecha}"
 
         # ==========================
@@ -486,6 +493,7 @@ class CashBoxViewSet(viewsets.ModelViewSet):
             "total_general": total_general,
             "reporte_tipo": reporte_tipo,
             "metodos": metodo_data,
+            "report": cashbox,
         })
 
         pdf = HTML(string=html_string).write_pdf()
@@ -604,8 +612,6 @@ class DailyCashReportViewSet(viewsets.ModelViewSet):
             "metodos": metodo_data,
             "report": daily_cash,
         })
-
-        print(daily_cash)
 
         pdf = HTML(string=html_string).write_pdf()
         response = HttpResponse(pdf, content_type="application/pdf")
@@ -1532,3 +1538,9 @@ class CompanyViewSet(viewsets.ModelViewSet):
 
     queryset = Company.objects.all()
     serializer_class = CompanySerializer
+
+class CashOutflowViewSet(viewsets.ModelViewSet):
+
+    queryset = CashOutflow.objects.all().order_by('-id')
+    serializer_class = CashOutflowSerializer
+    pagination_class = CustomPagination

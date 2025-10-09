@@ -109,6 +109,17 @@
     }
   },
   {
+    "model": "user.module",
+    "pk": 11,
+    "fields": {
+      "name": "Egresos",
+      "code": "egreso",
+      "path": "/dashboard/egreso",
+      "icon": "fa-solid fa-chart-line",
+      "parent": 5
+    }
+  },
+  {
     "model": "agua.company",
     "pk": 1,
     "fields": {

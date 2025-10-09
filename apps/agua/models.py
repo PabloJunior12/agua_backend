@@ -460,7 +460,23 @@ class CashMovement(models.Model):
 
     def __str__(self):
         return f"{self.cashbox} - {self.concept.name} - {self.total}"
-    
+
+class CashOutflow(models.Model):
+
+    cashbox = models.ForeignKey(CashBox, on_delete=models.CASCADE, related_name="outflows")
+    method = models.CharField(max_length=10, choices=InvoicePayment.PAYMENT_METHODS)
+    total = models.DecimalField(max_digits=10, decimal_places=2)
+    reference = models.CharField(max_length=100, blank=True, null=True)  # Ej. N° de depósito
+    notes = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Egreso de caja"
+        verbose_name_plural = "Egresos de caja"
+
+    def __str__(self):
+        return f"{self.cashbox} - {self.concept.name} - {self.total}"
+
 class ReadingGeneration(models.Model):
 
     period = models.DateField()

@@ -135,7 +135,14 @@ def generate_daily_report(cashbox: CashBox, date=None):
     # ingresos y egresos del día
     movimientos = cashbox.movements.filter(created_at__date=date)
     total_incomes = movimientos.filter(concept__type="income").aggregate(s=Sum("total"))["s"] or 0
-    total_outcomes = movimientos.filter(concept__type="outcome").aggregate(s=Sum("total"))["s"] or 0
+    # total_outcomes = movimientos.filter(concept__type="outcome").aggregate(s=Sum("total"))["s"] or 0
+
+    # ✅ Egresos del día (CashOutflow)
+    total_outcomes = (
+        cashbox.outflows.filter(created_at__date=date)
+        .aggregate(s=Sum("total"))["s"]
+        or 0
+    )
 
     closing_balance = opening_balance + total_incomes - total_outcomes
 

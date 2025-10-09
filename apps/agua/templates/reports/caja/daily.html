@@ -130,50 +130,6 @@
         Total S/ {{ total_general|floatformat:2 }}
     </h3>
 
-    <!-- Reporte por conceptos -->
-    <!-- {% for concepto in conceptos %}
-    <table>
-        <thead>
-            <tr>
-                <th>Código Factura</th>
-                <th>Fecha</th>
-                <th>Cliente</th>
-                <th>Dirección</th>
-                <th>Período(s)</th> -->
-    <!-- <th>Métodos de Pago</th> -->
-    <!-- <th class="right">Total</th>
-            </tr>
-        </thead>
-        <tbody> -->
-    <!-- {% for factura in concepto.facturas %}
-            <tr>
-                <td>{{ factura.code }}</td>
-                <td>{{ factura.date|date:"d/m/Y" }}</td>
-                <td>{{ factura.cliente }}</td>
-                <td>{{ factura.direccion }}</td>
-                <td>
-                    {% if factura.periodo %}
-                    {{ factura.periodo }}
-                    {% else %}
-                    -
-                    {% endif %}
-                </td> -->
-    <!-- <td>
-                    {% for metodo, monto in factura.pagos.items %}
-                    {{ metodo|title }}: {{ monto|floatformat:2 }}<br>
-                    {% endfor %}
-                </td> -->
-    <!-- <td class="right">{{ factura.total|floatformat:2 }}</td>
-            </tr>
-            {% endfor %}
-            <tr class="total">
-                <td colspan="5" class="right">Total {{ concepto.concepto }}</td>
-                <td class="right">{{ concepto.total|floatformat:2 }}</td>
-            </tr>
-        </tbody>
-    </table>
-    {% endfor %} -->
-
     <div style="display: flex; justify-content: space-between;">
         <div style="width: 48%;">
             <table>
