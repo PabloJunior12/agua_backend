@@ -20,6 +20,7 @@ class ModuleSerializer(serializers.ModelSerializer):
     children = serializers.SerializerMethodField()
 
     class Meta:
+        
         model = Module
         fields = ["id", "name", "code", "icon", "children","path"]
 
