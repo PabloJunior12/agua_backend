@@ -144,13 +144,24 @@ class DniApiView(APIView):
         
 class UserViewSet(ModelViewSet):
 
-    queryset = User.objects.all()
+    queryset = User.objects.all().order_by('id')
     serializer_class = UserSerializer
     pagination_class = CustomPagination
-
+    
     def get_queryset(self):
-        # filtrar para que no aparezcan usuarios con is_staff=True
-        return User.objects.filter(is_staff=False).order_by('id')
+        user = self.request.user
+
+        # Si es staff → ve todos los usuarios
+        if user.is_staff:
+            return User.objects.all().order_by('id')
+
+        # Si es admin → ve todos menos los staff
+        elif user.is_admin:
+            return User.objects.filter(is_staff=False).order_by('id')
+
+        # Otros usuarios → lista vacía
+        else:
+            return User.objects.none()
 
 class ModuleViewSet(ModelViewSet):
 

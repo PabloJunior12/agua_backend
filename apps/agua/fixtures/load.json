@@ -36,9 +36,9 @@
     "model": "user.module",
     "pk": 4,
     "fields": {
-      "name": "Generar lecturas",
-      "code": "reading-generation",
-      "path": "/dashboard/reading-generation",
+      "name": "Generar deudas",
+      "code": "debt-generation",
+      "path": "/dashboard/debt-generation",
       "icon": "fa-regular fa-address-book",
       "parent": null
     }

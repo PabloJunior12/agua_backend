@@ -81,3 +81,21 @@ class UserPermission(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.module.code}"
+
+class GlobalPermission(models.Model):
+    
+    ACTION_CHOICES = [
+        ('view', 'Ver'),
+        ('create', 'Crear'),
+        ('edit', 'Editar'),
+        ('delete', 'Eliminar'),
+        ('charge', 'Cobrar'),
+        ('export', 'Exportar'),
+        ('approve', 'Aprobar'),
+    ]
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='global_permissions')
+    allowed_actions = models.JSONField(default=list)
+
+    def __str__(self):
+        return f"Permisos globales de {self.user.username}"

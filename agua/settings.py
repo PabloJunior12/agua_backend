@@ -69,6 +69,7 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework.authentication.TokenAuthentication',  # Autenticacion por token
     ),
+    "EXCEPTION_HANDLER": "apps.agua.core.exceptions.custom_exception_handler",
     # 'DEFAULT_PERMISSION_CLASSES': (
     #     'rest_framework.permissions.IsAuthenticated',  # Solo usuarios autenticados pueden acceder
     # ),

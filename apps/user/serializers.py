@@ -1,6 +1,6 @@
 # serializers.py
 from rest_framework import serializers
-from .models import User, Module, UserPermission
+from .models import User, Module, UserPermission, GlobalPermission
 
 # from apps.agua.serializers import ModuleSerializer
 
@@ -35,7 +35,15 @@ class UserPermissionSerializer(serializers.ModelSerializer):
         model = UserPermission
         fields = ['module']
 
+class GlobalPermissionSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = GlobalPermission
+        fields = ['allowed_actions']
+
 class UserSerializer(serializers.ModelSerializer):
+
+    global_permissions = GlobalPermissionSerializer(required=False)
     permissions = UserPermissionSerializer(many=True, required=False)
     password = serializers.CharField(write_only=True, required=False)
 
@@ -43,25 +51,38 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'id', 'email', 'name', 'username', 'surname', 'phone',
-            'is_active', 'is_staff', 'is_admin', 'password', 'permissions'
+            'is_active', 'is_staff', 'is_admin', 'password', 'permissions','global_permissions'
         ]
 
     def create(self, validated_data):
+
+        global_data = validated_data.pop('global_permissions', None)
         permissions_data = validated_data.pop('permissions', [])
         password = validated_data.pop('password', None)
 
         user = User(**validated_data)
+
         if password:
+
             user.set_password(password)
+
         user.save()
 
         # Crear permisos asociados
         for perm in permissions_data:
             UserPermission.objects.create(user=user, module=perm['module'])
 
+        # 🌍 Crear permisos globales
+        GlobalPermission.objects.create(
+            user=user,
+            **(global_data or {'allowed_actions': []})
+        )
+
         return user
 
     def update(self, instance, validated_data):
+
+        global_data = validated_data.pop('global_permissions', None)
         permissions_data = validated_data.pop('permissions', None)
         password = validated_data.pop('password', None)
 
@@ -73,6 +94,11 @@ class UserSerializer(serializers.ModelSerializer):
             instance.set_password(password)
 
         instance.save()
+
+        if global_data is not None:
+            gp, _ = GlobalPermission.objects.get_or_create(user=instance)
+            gp.allowed_actions = global_data.get('allowed_actions', [])
+            gp.save()
 
         # Actualizar permisos si vienen en el request
         if permissions_data is not None:

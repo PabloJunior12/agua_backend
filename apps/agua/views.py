@@ -29,6 +29,7 @@ from .serializers import (
     CustomerSerializer, WaterMeterSerializer, ViaSerializer, CompanySerializer, CashOutflowSerializer, CalleSerializer, DebtSerializer, CashBoxSerializer, CustomerWithDebtsSerializer,
     ReadingSerializer,  InvoiceSerializer, CategorySerializer, ZonaSerializer, ReadingGenerationSerializer, CashConceptSerializer, DailyCashReportSerializer, NotificacionSerializer
 )
+from apps.agua.core.permissions import GlobalPermissionMixin
 
 from PyPDF2 import PdfMerger 
 import calendar
@@ -46,7 +47,7 @@ class CustomPagination(PageNumberPagination):
     page_size_query_param = 'page_size'  # Permite cambiar el tamaño desde la URL
     max_page_size = 100  # Tamaño máximo permitido
 
-class CustomerViewSet(viewsets.ModelViewSet):
+class CustomerViewSet(GlobalPermissionMixin, viewsets.ModelViewSet):
 
     queryset = Customer.objects.all().order_by('-id')
     serializer_class = CustomerSerializer
@@ -58,6 +59,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
     filterset_fields = ['codigo','zona','calle']  
 
     def create(self, request, *args, **kwargs):
+
         data = request.data
         has_meter = data.get('has_meter', True)
         meter_data = data.get('meter', None)
@@ -110,6 +112,21 @@ class CustomerViewSet(viewsets.ModelViewSet):
 
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+  
+    def update(self, request, *args, **kwargs):
+
+        self.required_action = "edit"
+        self.check_global_permission(request)
+
+        return super().update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+
+        # Validar permiso global para eliminar
+        self.required_action = "delete"
+        self.check_global_permission(request)
+
+        return super().destroy(request, *args, **kwargs)
 
     @action(detail=False, methods=["get"], url_path="by-code")
     def by_code_and_dni(self, request):
