@@ -164,7 +164,8 @@
     "fields": {
       "code": "003",
       "name": "Cargo fijo",
-      "type": "income"
+      "type": "income",
+      "total": 3
     }
   },
   {

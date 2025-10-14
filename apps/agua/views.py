@@ -792,7 +792,14 @@ class ReadingViewSet(viewsets.ModelViewSet):
                     paid = False
 
                 period_date = date(2025, month, 1)
-             
+
+                try:
+                    cargo_fijo = CashConcept.objects.get(code="003")
+                except CashConcept.DoesNotExist:
+                    cargo_fijo = None
+
+                total_fixed_charge = cargo_fijo.total if cargo_fijo else Decimal("0.00")
+
                 registros.append(
                     Reading(
                         customer=customer,
@@ -802,12 +809,11 @@ class ReadingViewSet(viewsets.ModelViewSet):
                         consumption=consumption or Decimal("0.00"),
                         total_water = total_amount,
                         total_sewer = customer.category.price_sewer,
-                        total_fixed_charge = 3,
-                        total_amount=total_amount + customer.category.price_sewer + 3,
+                        total_fixed_charge = total_fixed_charge,
+                        total_amount=total_amount + customer.category.price_sewer + total_fixed_charge,
                         paid=paid
                     )
                 )
-
 
             # print(codigo,"------")
 
@@ -1256,6 +1262,16 @@ class DebtViewSet(viewsets.ModelViewSet):
         debts_to_create = []
         details_to_create = []
 
+        try:
+
+            cargo_fijo = CashConcept.objects.get(code="003")
+
+        except CashConcept.DoesNotExist:
+
+            cargo_fijo = None
+
+        total_fixed_charge = cargo_fijo.total if cargo_fijo else Decimal("0.00")
+
         for row in df.itertuples(index=False):
             codigo = str(row.Codigo)
             year = row.Año
@@ -1278,10 +1294,11 @@ class DebtViewSet(viewsets.ModelViewSet):
                     errores.append({"codigo": codigo, "anio": year, "meses": meses_texto, "total": total, "error": f"Error al generar periodos: {str(e)}"})
                     continue
 
-                # Calcular montos
-                total_water = (float(total) / len(periodos)) if (total and len(periodos) > 0) else 0
-                total_sewer = float(customer.category.price_sewer or 0)
-                total_fixed_charge = 3.0
+                # Calcular montos con precisión decimal
+                total_water = (Decimal(total) / Decimal(len(periodos))) if (total and len(periodos) > 0) else Decimal("0.00")
+                total_sewer = Decimal(customer.category.price_sewer or 0)
+                total_fixed_charge = Decimal(total_fixed_charge or 0)
+
                 amount = total_water + total_sewer + total_fixed_charge
 
                 for periodo in periodos:
@@ -1370,7 +1387,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
 class CashConceptViewSet(viewsets.ModelViewSet):
 
-    queryset = CashConcept.objects.all() 
+    queryset = CashConcept.objects.all().order_by('id')
     serializer_class = CashConceptSerializer
 
 class CategoryViewSet(viewsets.ModelViewSet):

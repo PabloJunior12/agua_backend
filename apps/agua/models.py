@@ -120,6 +120,7 @@ class CashConcept(models.Model):
     code = models.CharField(max_length=3, unique=True)  # Ej. 001, 002
     name = models.CharField(max_length=150)
     type = models.CharField(max_length=15)
+    total = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
 
     def __str__(self):
         return f"{self.code} - {self.name} ({self.get_type_display()})"
