@@ -214,6 +214,11 @@ class Reading(models.Model):
         return (consumo_base * tariff.price_water) + (exceso * tariff.extra_rate)
 
     def calculate_total(self):
+
+        cargo_fijo = CashConcept.objects.get(code="003")
+              
+        total_fixed_charge = cargo_fijo.total if cargo_fijo else Decimal("0.00")
+
         tariff = self.customer.category
 
         if tariff.has_meter:
@@ -227,7 +232,7 @@ class Reading(models.Model):
             self.consumption = Decimal('0.000')
 
         self.total_sewer = tariff.price_sewer
-        self.total_fixed_charge = Decimal('3.00')
+        self.total_fixed_charge = total_fixed_charge
         self.total_amount = self.total_water + self.total_sewer + self.total_fixed_charge
 
         return self.total_amount
@@ -443,7 +448,7 @@ class InvoicePayment(models.Model):
         return f"{self.invoice.code} - {self.get_method_display()} {self.total}"
 
 class InvoiceConcept(models.Model):
-    
+
     invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name='invoice_concepts')
     concept = models.ForeignKey(CashConcept, on_delete=models.PROTECT)
     description = models.CharField(max_length=255, blank=True, null=True)

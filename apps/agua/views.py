@@ -1159,13 +1159,17 @@ class DebtViewSet(viewsets.ModelViewSet):
         customer_id = data.get("customer")
         period = data.get("period")
 
+        cargo_fijo = CashConcept.objects.get(code="003")
+              
+        total_fixed_charge = cargo_fijo.total if cargo_fijo else Decimal("0.00")
+
         # Obtener cliente
         customer = Customer.objects.get(id=customer_id)
 
         # Calcular montos
         total_water = customer.category.price_water
         total_sewer = customer.category.price_sewer
-        total_fixed_charge = 3
+   
 
         total_amount = total_water + total_sewer + total_fixed_charge
 
