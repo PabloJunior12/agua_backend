@@ -442,6 +442,14 @@ class InvoicePayment(models.Model):
     def __str__(self):
         return f"{self.invoice.code} - {self.get_method_display()} {self.total}"
 
+class InvoiceConcept(models.Model):
+    
+    invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name='invoice_concepts')
+    concept = models.ForeignKey(CashConcept, on_delete=models.PROTECT)
+    description = models.CharField(max_length=255, blank=True, null=True)
+    total = models.DecimalField(max_digits=10, decimal_places=2)
+
+
 class CashMovement(models.Model):
     
     cashbox = models.ForeignKey(CashBox, on_delete=models.CASCADE, related_name="movements")
@@ -522,6 +530,9 @@ class Notificacion(models.Model):
 
     def __str__(self):
         return f"{self.usuario.username} - {self.mensaje[:30]}"
+
+
+
 
 #     state = models.BooleanField(default=True)
 #     description = models.CharField(max_length=200)

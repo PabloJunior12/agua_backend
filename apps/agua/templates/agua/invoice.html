@@ -144,6 +144,7 @@
         <hr>
 
         <!-- Detalle de pagos -->
+         {% if payments %}
         <table class="table">
             <thead>
                 <tr>
@@ -166,6 +167,35 @@
                 {% endfor %}
             </tbody>
         </table>
+        {% endif %}
+
+        {% if concepts %}
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Codigo</th>
+                    <th>Concepto</th>
+                    <th style="text-align:right;">Importe (S/)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in concepts %}
+                <tr>
+                    <td>{{ item.concept.code }}</td>
+                    <td>{{ item.concept.name }}</td>
+                    <td style="text-align:right;">
+                        {% if invoice.status == "cancelled" %}
+                        0.00
+                        {% else %}
+                        {{ item.total|floatformat:2 }}
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+
 
         <!-- Total -->
         <div class="total-box">

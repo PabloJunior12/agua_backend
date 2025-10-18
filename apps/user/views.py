@@ -165,7 +165,7 @@ class UserViewSet(ModelViewSet):
 
 class ModuleViewSet(ModelViewSet):
 
-    queryset = Module.objects.all()
+    queryset = Module.objects.all().order_by('id')
     serializer_class = ModuleSerializer
 
 class UserPermissionViewSet(ModelViewSet):

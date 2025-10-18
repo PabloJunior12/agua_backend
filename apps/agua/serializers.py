@@ -2,7 +2,7 @@ from rest_framework import serializers
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils.timezone import now
 from django.conf import settings
-from .models import Customer, WaterMeter, CashBox, Company, Notificacion, CashOutflow, CashMovement, DebtDetail, CashConcept, Reading, ReadingGeneration, Invoice, Category, Via, Calle, InvoiceDebt, Zona, Debt, InvoicePayment, DailyCashReport
+from .models import Customer, WaterMeter, CashBox, Company, Notificacion, CashOutflow, InvoiceConcept, CashMovement, DebtDetail, CashConcept, Reading, ReadingGeneration, Invoice, Category, Via, Calle, InvoiceDebt, Zona, Debt, InvoicePayment, DailyCashReport
 from .utils import next_month_date
 from django.db import transaction
 from django.db.models import Sum
@@ -261,6 +261,13 @@ class InvoiceDebtSerializer(serializers.ModelSerializer):
         model = InvoiceDebt
         fields = ['debt']
 
+class InvoiceConceptSerializer(serializers.ModelSerializer):
+    concept = serializers.PrimaryKeyRelatedField(queryset=CashConcept.objects.all())
+
+    class Meta:
+        model = InvoiceConcept
+        exclude = ['invoice']  # 👈 no se envía desde Angular
+        
 class InvoicePaymentSerializer(serializers.ModelSerializer):
 
     class Meta:
@@ -270,6 +277,7 @@ class InvoicePaymentSerializer(serializers.ModelSerializer):
 
 class InvoiceSerializer(serializers.ModelSerializer):
     
+    invoice_concepts = InvoiceConceptSerializer(many=True, required=False)
     invoice_debts = InvoiceDebtSerializer(many=True)
     invoice_payments = InvoicePaymentSerializer(many=True)
 
@@ -286,80 +294,105 @@ class InvoiceSerializer(serializers.ModelSerializer):
         return data
 
     def create(self, validated_data):
-        debts_data = validated_data.pop('invoice_debts', [])
-        payments_data = validated_data.pop('invoice_payments', [])
-
-        # Extraemos las deudas seleccionadas (objetos Debt)
-        selected_debts = [item['debt'] for item in debts_data]
-
-        if selected_debts:
-            # Ordenar por periodo
-            selected_debts = sorted(selected_debts, key=lambda d: d.period)
-
-            # Obtener todas las deudas impagas del cliente
-            customer = validated_data['customer']
-            all_unpaid = Debt.objects.filter(customer=customer, paid=False).order_by("period")
-
-            if all_unpaid.exists():
-                first_unpaid = all_unpaid.first().period
-
-                # ✅ Validar que la primera seleccionada sea la más antigua impaga
-                if selected_debts[0].period != first_unpaid:
-                    raise serializers.ValidationError({
-                        "error": f"Debes pagar empezando desde {first_unpaid.strftime('%m-%Y')}."
-                    })
-
-            # ✅ Validar que los periodos seleccionados sean consecutivos
-            for i in range(1, len(selected_debts)):
-                prev = selected_debts[i-1].period
-                curr = selected_debts[i].period
-                diff = (curr.year - prev.year) * 12 + (curr.month - prev.month)
-                if diff != 1:
-                    raise serializers.ValidationError({
-                        "error": "Las deudas deben pagarse en meses consecutivos."
-                    })
+        debts_data = validated_data.pop("invoice_debts", [])
+        concepts_data = validated_data.pop("invoice_concepts", [])
+        payments_data = validated_data.pop("invoice_payments", [])
 
         with transaction.atomic():
             invoice = Invoice.objects.create(**validated_data)
             total = 0
 
-            for item in debts_data:
-                debt = item['debt']
-                InvoiceDebt.objects.create(invoice=invoice, debt=debt, total=debt.amount)
+            # --- CASO 1: COBRO DE DEUDAS ---
+            if debts_data:
+                selected_debts = [item["debt"] for item in debts_data]
+                selected_debts = sorted(selected_debts, key=lambda d: d.period)
+                customer = validated_data["customer"]
+                all_unpaid = Debt.objects.filter(customer=customer, paid=False).order_by("period")
 
-                # Marcar deuda como pagada
-                debt.paid = True
-                debt.save()
+                if all_unpaid.exists():
+                    first_unpaid = all_unpaid.first().period
+                    if selected_debts[0].period != first_unpaid:
+                        raise serializers.ValidationError({
+                            "error": f"Debes pagar empezando desde {first_unpaid.strftime('%m-%Y')}."
+                        })
 
-                if debt.reading:
-                    debt.reading.paid = True
-                    debt.reading.save(skip_process=True)
+                for i in range(1, len(selected_debts)):
+                    prev = selected_debts[i - 1].period
+                    curr = selected_debts[i].period
+                    diff = (curr.year - prev.year) * 12 + (curr.month - prev.month)
+                    if diff != 1:
+                        raise serializers.ValidationError({
+                            "error": "Las deudas deben pagarse en meses consecutivos."
+                        })
 
-                total += debt.amount
+                for item in debts_data:
+                    debt = item["debt"]
+                    InvoiceDebt.objects.create(invoice=invoice, debt=debt, total=debt.amount)
+                    debt.paid = True
+                    debt.save()
 
+                    if debt.reading:
+                        debt.reading.paid = True
+                        debt.reading.save(skip_process=True)
+
+                    total += debt.amount
+
+            # --- CASO 2: PAGO DE CONCEPTOS ---
+            elif concepts_data:
+                for item in concepts_data:
+                    # 👇 ahora concept es un PrimaryKeyRelatedField (solo el id)
+                    concept = item["concept"]
+                    total_concept = item.get("total", 0)
+                    description = item.get("description")
+
+                    InvoiceConcept.objects.create(
+                        invoice=invoice,
+                        concept=concept,
+                        description=description,
+                        total=total_concept
+                    )
+                    total += total_concept
+
+            else:
+                raise serializers.ValidationError({
+                    "error": "Debe incluir deudas o conceptos para registrar la factura."
+                })
+
+            # --- REGISTRAR PAGOS ---
             payments_total = 0
             for item in payments_data:
                 payment = InvoicePayment.objects.create(
                     invoice=invoice,
-                    method=item['method'],
-                    total=item['total'],
-                    reference=item.get('reference'),
-                    cashbox=item['cashbox']
+                    method=item["method"],
+                    total=item["total"],
+                    reference=item.get("reference"),
+                    cashbox=item["cashbox"]
                 )
 
-                # Generar movimientos de caja por cada detalle de deuda
-                for inv_debt in invoice.invoice_debts.all():
-                    for detail in inv_debt.debt.details.all():
+                if debts_data:
+                    for inv_debt in invoice.invoice_debts.all():
+                        for detail in inv_debt.debt.details.all():
+                            CashMovement.objects.create(
+                                cashbox=item["cashbox"],
+                                concept=detail.concept,
+                                method=item["method"],
+                                total=detail.amount,
+                                reference=item.get("reference"),
+                                invoice_payment=payment
+                            )
+
+                elif concepts_data:
+                    for inv_concept in invoice.invoice_concepts.all():
                         CashMovement.objects.create(
-                            cashbox=item['cashbox'],
-                            concept=detail.concept,
-                            method=item['method'],
-                            total=detail.amount,
-                            reference=item.get('reference'),
+                            cashbox=item["cashbox"],
+                            concept=inv_concept.concept,
+                            method=item["method"],
+                            total=inv_concept.total,
+                            reference=item.get("reference"),
                             invoice_payment=payment
                         )
 
-                payments_total += item['total']
+                payments_total += item["total"]
 
             if round(payments_total, 2) != round(total, 2):
                 raise serializers.ValidationError({
@@ -370,8 +403,9 @@ class InvoiceSerializer(serializers.ModelSerializer):
             invoice.save()
 
         return invoice
- 
+
 class ViaSerializer(serializers.ModelSerializer):
+
 
     class Meta:
         

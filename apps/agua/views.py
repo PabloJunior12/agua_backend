@@ -1349,19 +1349,22 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         invoice = get_object_or_404(Invoice, id=pk)
 
         # Usamos la relación inversa para evitar consultas innecesarias
-        payments = invoice.invoice_debts.select_related('debt').order_by('debt__period')
+        payments_debts = invoice.invoice_debts.select_related('debt').order_by('debt__period')
+        payments_concepts = invoice.invoice_concepts.select_related('concept').order_by('concept__code')
 
         context = {
             "invoice": invoice,
             "customer": invoice.customer,
-            "payments": payments,
-            "total_paid": sum((p.debt.amount for p in payments), 0),
+            "concepts": payments_concepts,
+            "payments": payments_debts,
+            "total_paid": sum((p.total for p in payments_debts), 0),
+            "total_paid_concept": sum((p.total for p in payments_concepts), 0),
             "company_name":  "Empresa",
             "company_ruc": "99999999999",
             "company_logo": None
         }
 
-        print(context)
+      
 
         template = get_template('agua/invoice.html')
         html_string = template.render(context)
