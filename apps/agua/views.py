@@ -1396,6 +1396,8 @@ class CashConceptViewSet(viewsets.ModelViewSet):
 
     queryset = CashConcept.objects.all().order_by('id')
     serializer_class = CashConceptSerializer
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['name']
 
 class CategoryViewSet(viewsets.ModelViewSet):
     

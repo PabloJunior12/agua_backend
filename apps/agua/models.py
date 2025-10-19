@@ -33,21 +33,39 @@ class Zona(models.Model):
         verbose_name_plural = "Zonas"
 
 class Via(models.Model):
-
-    codigo = models.CharField(max_length=2)
+    codigo = models.CharField(max_length=2, unique=True, editable=False)
     name = models.CharField(max_length=50)
+
+    def save(self, *args, **kwargs):
+        # Solo generar el código si no existe
+        if not self.codigo:
+            last_via = Via.objects.order_by('-id').first()
+            next_number = 1 if not last_via else int(last_via.codigo) + 1
+            self.codigo = str(next_number).zfill(2)  # genera "01", "02", "03"...
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.name
 
 class Calle(models.Model):
 
-    codigo = models.CharField(max_length=4)
+    codigo = models.CharField(max_length=4, unique=True, editable=False)
     via = models.ForeignKey(Via, on_delete=models.CASCADE, related_name='calles')
     name = models.CharField(max_length=100)
 
+    def save(self, *args, **kwargs):
+        # Generar código automáticamente si no existe
+        if not self.codigo:
+            last_calle = Calle.objects.exclude(codigo__isnull=True).exclude(codigo='').order_by('-id').first()
+            try:
+                next_number = int(last_calle.codigo) + 1 if last_calle else 1
+            except ValueError:
+                next_number = 1
+            self.codigo = str(next_number).zfill(4)  # genera "0001", "0002", ...
+        super().save(*args, **kwargs)
+
     def __str__(self):
-        return f"{self.via.name} {self.name}"
+        return self.name
 
 class Category(models.Model):
     
@@ -453,7 +471,6 @@ class InvoiceConcept(models.Model):
     concept = models.ForeignKey(CashConcept, on_delete=models.PROTECT)
     description = models.CharField(max_length=255, blank=True, null=True)
     total = models.DecimalField(max_digits=10, decimal_places=2)
-
 
 class CashMovement(models.Model):
     
