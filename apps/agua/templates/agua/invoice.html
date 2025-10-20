@@ -137,8 +137,16 @@
 
         <!-- Datos del cliente -->
         <div class="customer-info">
-            <p><strong>Cliente:</strong> {{ customer.full_name }}</p>
-            <p><strong>Dirección:</strong> {{ customer.address }}</p>
+            {% if invoice.customer.codigo == "00000" %}
+                <!-- Si es un pagador externo -->
+                <p><strong>Cliente:</strong> {{ invoice.name_optional|default:"(Sin nombre)" }}</p>
+                <p><strong>Documento:</strong> {{ invoice.number_optional|default:"(Sin documento)" }}</p>
+            {% else %}
+                <!-- Si es un cliente registrado -->
+                <p><strong>Cliente:</strong> {{ invoice.customer.full_name }}</p>
+                <p><strong>Dirección:</strong> {{ invoice.customer.address|default:"(Sin dirección)" }}</p>
+                <p><strong>Documento:</strong> {{ invoice.customer.number|default:"(Sin documento)" }}</p>
+            {% endif %}
         </div>
 
         <hr>

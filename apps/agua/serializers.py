@@ -277,6 +277,12 @@ class InvoicePaymentSerializer(serializers.ModelSerializer):
 
 class InvoiceSerializer(serializers.ModelSerializer):
     
+    customer = serializers.PrimaryKeyRelatedField(
+        queryset=Customer.objects.all(),
+        required=False,
+        allow_null=True
+    )
+
     invoice_concepts = InvoiceConceptSerializer(many=True, required=False)
     invoice_debts = InvoiceDebtSerializer(many=True)
     invoice_payments = InvoicePaymentSerializer(many=True)
@@ -297,6 +303,16 @@ class InvoiceSerializer(serializers.ModelSerializer):
         debts_data = validated_data.pop("invoice_debts", [])
         concepts_data = validated_data.pop("invoice_concepts", [])
         payments_data = validated_data.pop("invoice_payments", [])
+
+        # 🔹 1. Si no se envió cliente (por ser pagador externo)
+        if not validated_data.get("customer"):
+            try:
+                default_customer = Customer.objects.get(codigo="00000")  # o "000000"
+            except Customer.DoesNotExist:
+                raise serializers.ValidationError({
+                    "error": "No existe el cliente genérico con código '00000'."
+                })
+            validated_data["customer"] = default_customer
 
         with transaction.atomic():
             invoice = Invoice.objects.create(**validated_data)

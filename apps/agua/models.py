@@ -383,6 +383,8 @@ class Invoice(models.Model):
         ('cancelled', 'Anulada'),
     ]
 
+    name_optional = models.CharField(max_length=200, blank=True, null=True)
+    number_optional = models.CharField(max_length=15, blank=True, null=True)
     code = models.CharField(max_length=7, unique=True, editable=False)
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE, related_name='invoices')
     date = models.DateField(auto_now_add=True)

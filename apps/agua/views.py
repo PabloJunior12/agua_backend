@@ -49,7 +49,7 @@ class CustomPagination(PageNumberPagination):
 
 class CustomerViewSet(GlobalPermissionMixin, viewsets.ModelViewSet):
 
-    queryset = Customer.objects.all().order_by('-id')
+    queryset = Customer.objects.all().order_by('-codigo')
     serializer_class = CustomerSerializer
     pagination_class = CustomPagination
     filter_backends = [DjangoFilterBackend,filters.SearchFilter]
