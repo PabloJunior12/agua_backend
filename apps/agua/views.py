@@ -877,8 +877,9 @@ class ReadingViewSet(viewsets.ModelViewSet):
         """
         Generar PDF de un solo recibo (para pruebas o impresion individual)
         """ 
-        print(pk)
+   
         reading = Reading.objects.filter(customer_id=pk).order_by('-period').first()
+        debt = Debt.objects.filter(customer_id=pk).order_by('-period').first()
         if not reading:
 
             return Response({"error": "No hay lecturas registradas"}, status=404)
@@ -918,11 +919,14 @@ class ReadingViewSet(viewsets.ModelViewSet):
 
         # 🚀 armamos la misma estructura que en el masivo
         readings_context = [{
+            "debt" : debt,
             "reading": reading,
             "grouped_debts": grouped_debts,
             "total_previous_debt": total_previous_debt,
             "total_general": total_general,
         }]
+
+        print(readings_context)
 
         html = render_to_string("agua/recibo.html", {
             "readings_context": readings_context,
@@ -940,85 +944,111 @@ class ReadingGenerationViewSet(viewsets.ModelViewSet):
     queryset = ReadingGeneration.objects.all()
     serializer_class = ReadingGenerationSerializer
 
+    @transaction.atomic
     def create(self, request, *args, **kwargs):
-
         """
-        Sobrescribe el create para generar automáticamente
-        las lecturas de clientes sin medidor para el periodo enviado.
+        Genera lecturas y deudas automáticas para clientes sin medidor
+        en el periodo indicado.
         """
         period_str = request.data.get("period")
-
         if not period_str:
-
             return Response({"error": "Falta el periodo (YYYY-MM)"}, status=400)
 
         try:
-
             period_date = datetime.strptime(period_str + "-01", "%Y-%m-%d").date()
-
         except ValueError:
+            return Response({"error": "Formato inválido de periodo"}, status=400)
 
-            return Response({"error": "Formato invalido de periodo"}, status=400)
-
-        # validar si ya existe
+        # Validar si ya existe una generación para ese periodo
         if ReadingGeneration.objects.filter(period=period_date).exists():
-
-            return Response({"error": f"Ya se generaron lecturas para {period_str}"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": f"Ya se generaron lecturas para {period_str}."}, status=400)
 
         customers = Customer.objects.filter(has_meter=False)
         created = 0
+        skipped_existing = 0
+        skipped_paid = 0
 
-        with transaction.atomic():
+        for customer in customers:
+            # Verificar si ya tiene una lectura para ese periodo
+            existing_reading = Reading.objects.filter(customer=customer, period=period_date).first()
+            if existing_reading:
+                skipped_existing += 1
+                continue
 
-            for customer in customers:
+            # Verificar si ya tiene una deuda pagada de ese periodo
+            if Debt.objects.filter(customer=customer, period=period_date, paid=True).exists():
+                skipped_paid += 1
+                continue
 
-                tariff = customer.category
+            tariff = customer.category
 
-                Reading.objects.create(
-                    customer=customer,
-                    period=period_date,
-                    previous_reading=0,
-                    current_reading=0,
-                    consumption=0,
-                    total_water=tariff.price_water,
-                    total_sewer=tariff.price_sewer,
-                    total_amount=tariff.price_water + tariff.price_sewer,
-                    paid=False,
-                    date_of_issue = request.data.get("date_of_issue"),
-                    date_of_due = request.data.get("date_of_due"),
-                    date_of_cute = request.data.get("date_of_cute")
-                )
-                created += 1
-
-            # Crear la generación
-            generation = ReadingGeneration.objects.create(
+            # Crear lectura
+            Reading.objects.create(
+                customer=customer,
                 period=period_date,
-                created_by=request.user if request.user.is_authenticated else None,
-                total_generated=created,
-                notes="Generacion automatica para clientes sin medidor",
-                date_of_issue = request.data.get("date_of_issue"),
-                date_of_due = request.data.get("date_of_due"),
-                date_of_cute = request.data.get("date_of_cute")
+                previous_reading=0,
+                current_reading=0,
+                consumption=0,
+                total_water=tariff.price_water,
+                total_sewer=tariff.price_sewer,
+                total_amount=tariff.price_water + tariff.price_sewer,
+                paid=False,
+                date_of_issue=request.data.get("date_of_issue"),
+                date_of_due=request.data.get("date_of_due"),
+                date_of_cute=request.data.get("date_of_cute")
             )
 
-        return Response({ "message": f"Se generaron {created} lecturas para el periodo {period_str}" }, status=status.HTTP_201_CREATED)
+            created += 1
 
+        # Registrar la generación
+        generation = ReadingGeneration.objects.create(
+            period=period_date,
+            created_by=request.user if request.user.is_authenticated else None,
+            total_generated=created,
+            notes=request.data.get("notes") or "Generación automática para clientes sin medidor",
+            date_of_issue=request.data.get("date_of_issue"),
+            date_of_due=request.data.get("date_of_due"),
+            date_of_cute=request.data.get("date_of_cute")
+        )
+
+        return Response({
+            "message": f"Generación completada para {period_str}.",
+            "total_creados": created,
+            "omitidos_existentes": skipped_existing,
+            "omitidos_pagados": skipped_paid
+        }, status=201)
+    
+    @transaction.atomic
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
+        period = instance.period
 
-        # Borrar lecturas generadas en ese periodo (solo las no pagadas)
-        Reading.objects.filter(
-            period=instance.period,
+        # Filtrar lecturas eliminables
+        readings_to_delete = Reading.objects.filter(
+            period=period,
             customer__has_meter=False,
-        ).delete()
+            paid=False
+        )
+
+        deleted_count = readings_to_delete.count()
+
+        # Eliminar deudas vinculadas a esas lecturas
+        debts_to_delete = Debt.objects.filter(
+            period=period,
+            reading__in=readings_to_delete
+        )
+        debts_to_delete.delete()
+
+        # Eliminar lecturas
+        readings_to_delete.delete()
 
         # Eliminar la generación
         instance.delete()
 
-        return Response(
-            {"message": f"Generación del periodo {instance.period.strftime('%Y-%m')} eliminada correctamente."},
-            status=status.HTTP_204_NO_CONTENT
-        )
+        return Response({
+            "message": f"Generación del periodo {period.strftime('%Y-%m')} anulada correctamente.",
+            "lecturas_eliminadas": deleted_count
+        }, status=204)
 
     @action(detail=True, methods=['get'])
     def download_receipts(self, request, pk=None):
@@ -1146,6 +1176,9 @@ class ReadingGenerationViewSet(viewsets.ModelViewSet):
 
         return response
     
+
+
+
 class DebtViewSet(viewsets.ModelViewSet):
 
     queryset = Debt.objects.all().order_by('period')
@@ -1157,43 +1190,65 @@ class DebtViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         data = request.data
         customer_id = data.get("customer")
-        period = data.get("period")
+        period_str = data.get("period")
 
-        cargo_fijo = CashConcept.objects.get(code="003")
-              
-        total_fixed_charge = cargo_fijo.total if cargo_fijo else Decimal("0.00")
+        if not customer_id or not period_str:
+            raise ValidationError("Debe enviar 'customer' y 'period'.")
+
+        period = date.fromisoformat(period_str)
+        normalized_period = date(period.year, period.month, 1)
 
         # Obtener cliente
-        customer = Customer.objects.get(id=customer_id)
+        try:
+            customer = Customer.objects.get(id=customer_id)
+        except Customer.DoesNotExist:
+            raise ValidationError("El cliente no existe.")
 
-        # Calcular montos
-        total_water = customer.category.price_water
-        total_sewer = customer.category.price_sewer
-   
+        # ⚠️ Evitar duplicados
+        if Debt.objects.filter(customer=customer, period=normalized_period).exists():
+            raise ValidationError("Ya existe una deuda para este cliente y periodo.")
 
-        total_amount = total_water + total_sewer + total_fixed_charge
-
-        # Crear deuda
-        debt = Debt.objects.create(
-            customer=customer,
-            period=period,
-            amount=total_amount,
-            description=f"Deuda del periodo {period}"
-        )
-
-        # Conceptos
+        # Obtener conceptos
         conceptos = {
             "001": CashConcept.objects.get(code="001"),  # Agua
             "002": CashConcept.objects.get(code="002"),  # Desagüe
             "003": CashConcept.objects.get(code="003"),  # Cargo fijo
         }
 
+        # Calcular montos base
+        total_fixed_charge = conceptos["003"].total
+        total_water = customer.category.price_water
+        total_sewer = customer.category.price_sewer
+        total_amount = total_water + total_sewer + total_fixed_charge
+
+        # ✅ Crear lectura asociada (sin procesos automáticos)
+        reading = Reading(
+            customer=customer,
+            period=normalized_period,
+            current_reading=Decimal("0.000"),
+            has_meter=customer.has_meter,
+            total_water=total_water,
+            total_sewer=total_sewer,
+            total_fixed_charge=total_fixed_charge,
+            total_amount=total_amount,
+        )
+        reading.save(skip_process=True)
+
+        # ✅ Crear deuda vinculada
+        debt = Debt.objects.create(
+            customer=customer,
+            period=normalized_period,
+            amount=total_amount,
+            description=f"Deuda del periodo {period.strftime('%Y-%m')}",
+            reading=reading,  # 👈 vinculación directa
+        )
+
         # Crear detalles
         DebtDetail.objects.create(debt=debt, concept=conceptos["001"], amount=total_water)
         DebtDetail.objects.create(debt=debt, concept=conceptos["002"], amount=total_sewer)
         DebtDetail.objects.create(debt=debt, concept=conceptos["003"], amount=total_fixed_charge)
 
-        # Serializar respuesta
+        # Respuesta
         serializer = self.get_serializer(debt)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     
@@ -1340,6 +1395,37 @@ class DebtViewSet(viewsets.ModelViewSet):
             "procesados": procesados,
             "errores": errores
         }, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"])
+    def create_reading(self, request, pk=None):
+        debt = self.get_object()
+
+        if debt.reading:
+
+            return Response(
+                {"detail": "Esta deuda ya tiene una lectura vinculada."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Crear lectura SIN procesar
+        reading = Reading(
+            customer=debt.customer,
+            paid=debt.paid,
+            period=debt.period,
+            current_reading=Decimal("0.000"),
+            has_meter=debt.customer.has_meter,
+        )
+
+        reading.save(skip_process=True)  # 👈 aquí usamos el flag
+
+        # Vincular lectura con deuda existente
+        debt.reading = reading
+        debt.save(update_fields=["reading"])
+
+        return Response(
+            {"detail": f"Lectura creada y vinculada correctamente a la deuda {debt.id}."},
+            status=status.HTTP_201_CREATED
+        )
 
 class InvoiceViewSet(viewsets.ModelViewSet):
 

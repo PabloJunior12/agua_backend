@@ -145,6 +145,13 @@ class CashConcept(models.Model):
 
 class Customer(models.Model):
 
+    ESTADO_CHOICES = [
+        ("active", "Activo"),
+        ("inactive", "Inactivo"),
+        ("suspended", "Suspendido"),
+    ]
+
+
     codigo = models.CharField(max_length=5, null=True, blank=True)
     identity_document_type = models.IntegerField(default=1)
     full_name = models.CharField(max_length=200)
@@ -157,6 +164,13 @@ class Customer(models.Model):
     mz = models.CharField(max_length=15, blank=True, null=True)
     lote = models.CharField(max_length=15, blank=True, null=True)
     nro = models.CharField(max_length=15, blank=True, null=True)
+
+    # 🔹 Nuevo campo
+    state = models.CharField(
+        max_length=15,
+        choices=ESTADO_CHOICES,
+        default="active",
+    )
 
     def __str__(self):
         return f"{self.full_name} ({self.number or 'sin DNI'})"
@@ -366,6 +380,27 @@ class Debt(models.Model):
 
     def __str__(self):
         return f"{self.customer.full_name} - {self.period.strftime('%Y-%m')} - {self.amount}"
+    
+    def delete(self, *args, **kwargs):
+        # Guardar el ID de la lectura antes de eliminar la deuda
+        reading_id = self.reading_id
+
+        # Eliminar la deuda
+        super().delete(*args, **kwargs)
+
+        # Si había una lectura asociada, intentar eliminarla
+        if reading_id:
+            try:
+                reading = Reading.objects.get(id=reading_id)
+                # Solo eliminar si sigue sin deuda asociada (verificación segura)
+                if not getattr(reading, "debt", None):
+                    reading.delete()
+            except Reading.DoesNotExist:
+                pass
+
+    def __str__(self):
+
+        return f"{self.customer.full_name} - {self.period.strftime('%Y-%m')} - {self.amount}"
 
 class DebtDetail(models.Model):
 
@@ -537,11 +572,6 @@ class ReadingGeneration(models.Model):
 
         return f"Generación {self.period.strftime('%Y-%m')} ({self.total_generated} lecturas)"
 
-    def delete(self, *args, **kwargs):
-        # Eliminar todos los readings de este periodo
-        Reading.objects.filter(period=self.period).delete()
-        Debt.objects.filter(period=self.period).delete()
-        super().delete(*args, **kwargs)
 
  # class PaymentMethod(models.Model):
 
