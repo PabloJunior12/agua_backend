@@ -6,7 +6,7 @@ from .models import Customer, WaterMeter, CashBox, Company, Notificacion, CashOu
 from .utils import next_month_date
 from django.db import transaction
 from django.db.models import Sum
-
+from decimal import Decimal
 import os
 
 class ZonaSerializer(serializers.ModelSerializer):
@@ -320,22 +320,11 @@ class InvoiceSerializer(serializers.ModelSerializer):
 
             # --- CASO 1: COBRO DE DEUDAS ---
             if debts_data:
-                selected_debt_ids = [
-                    item["debt"].id if isinstance(item["debt"], Debt) else item["debt"]
-                    for item in debts_data
-                ]
-
-                # Cargar las deudas reales ordenadas por periodo ascendente
-                selected_debts = list(
-                    Debt.objects.filter(id__in=selected_debt_ids)
-                    .order_by("period")
-                    .select_related("reading")
-                )
-
+                selected_debts = [item["debt"] for item in debts_data]
+                selected_debts = sorted(selected_debts, key=lambda d: d.period)
                 customer = validated_data["customer"]
                 all_unpaid = Debt.objects.filter(customer=customer, paid=False).order_by("period")
 
-                # Verificar si el primer periodo seleccionado coincide con el primer impago
                 if all_unpaid.exists():
                     first_unpaid = all_unpaid.first().period
                     if selected_debts[0].period != first_unpaid:
@@ -343,7 +332,6 @@ class InvoiceSerializer(serializers.ModelSerializer):
                             "error": f"Debes pagar empezando desde {first_unpaid.strftime('%m-%Y')}."
                         })
 
-                # Verificar que las deudas sean meses consecutivos
                 for i in range(1, len(selected_debts)):
                     prev = selected_debts[i - 1].period
                     curr = selected_debts[i].period
@@ -353,8 +341,8 @@ class InvoiceSerializer(serializers.ModelSerializer):
                             "error": "Las deudas deben pagarse en meses consecutivos."
                         })
 
-                # Registrar las deudas pagadas
-                for debt in selected_debts:
+                for item in debts_data:
+                    debt = item["debt"]
                     InvoiceDebt.objects.create(invoice=invoice, debt=debt, total=debt.amount)
                     debt.paid = True
                     debt.save()
@@ -431,6 +419,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
             invoice.save()
 
         return invoice
+
 
 class ViaSerializer(serializers.ModelSerializer):
 
