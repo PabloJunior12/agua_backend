@@ -100,20 +100,22 @@
 
             <!-- Facturas de este concepto -->
             {% for factura in concepto.facturas %}
-            <tr>
-                <td>{{ factura.code }}</td>
-                <td>{{ factura.date|date:"d/m/Y" }}</td>
-                <td>{{ factura.cliente }}</td>
-                <td>{{ factura.direccion }}</td>
-                <td>
-                    {% if factura.periodo %}
-                    {{ factura.periodo }}
-                    {% else %}
-                    -
-                    {% endif %}
-                </td>
-                <td class="right">{{ factura.total|floatformat:2 }}</td>
-            </tr>
+                {% if factura.total > 0 %}
+                    <tr>
+                        <td>{{ factura.code }}</td>
+                        <td>{{ factura.date|date:"d/m/Y" }}</td>
+                        <td>{{ factura.cliente }}</td>
+                        <td>{{ factura.direccion }}</td>
+                        <td>
+                            {% if factura.periodo %}
+                                {{ factura.periodo }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td class="right">{{ factura.total|floatformat:2 }}</td>
+                    </tr>
+                {% endif %}
             {% endfor %}
 
             <!-- Total del concepto -->
