@@ -33,15 +33,22 @@ class Zona(models.Model):
         verbose_name_plural = "Zonas"
 
 class Via(models.Model):
+
     codigo = models.CharField(max_length=2, unique=True, editable=False)
     name = models.CharField(max_length=50)
 
     def save(self, *args, **kwargs):
+
         # Solo generar el código si no existe
+
         if not self.codigo:
+
             last_via = Via.objects.order_by('-id').first()
+
             next_number = 1 if not last_via else int(last_via.codigo) + 1
+
             self.codigo = str(next_number).zfill(2)  # genera "01", "02", "03"...
+
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -135,13 +142,26 @@ class DailyCashReport(models.Model):
 
 class CashConcept(models.Model):
 
-    code = models.CharField(max_length=3, unique=True)  # Ej. 001, 002
+    code = models.CharField(max_length=3, unique=True, null=True, blank=True)
     name = models.CharField(max_length=150)
     type = models.CharField(max_length=15)
     total = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
 
+    def save(self, *args, **kwargs):
+        # Solo generar el código si no existe
+        if not self.code:
+            last_concept = CashConcept.objects.order_by('-id').first()
+            next_number = 1 if not last_concept else int(last_concept.code) + 1
+            self.code = str(next_number).zfill(3)  # genera "001", "002", "003", ...
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.name
+
     def __str__(self):
         return f"{self.code} - {self.name} ({self.get_type_display()})"
+    
+
 
 class Customer(models.Model):
 
