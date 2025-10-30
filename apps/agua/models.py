@@ -160,9 +160,7 @@ class CashConcept(models.Model):
 
     def __str__(self):
         return f"{self.code} - {self.name} ({self.get_type_display()})"
-    
-
-
+  
 class Customer(models.Model):
 
     ESTADO_CHOICES = [
@@ -604,9 +602,6 @@ class Notificacion(models.Model):
 
     def __str__(self):
         return f"{self.usuario.username} - {self.mensaje[:30]}"
-
-
-
 
 #     state = models.BooleanField(default=True)
 #     description = models.CharField(max_length=200)
